@@ -1,0 +1,88 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum DocumentType {
+  HANDWRITTEN_BILL
+  SUPPLIER_INVOICE
+  GST_DOCUMENT
+  KIRANA_NOTE
+  OTHER
+}
+
+enum ScanStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+  NEEDS_REVIEW
+}
+
+model Document {
+  id             String       @id @default(uuid())
+  type           DocumentType
+  imageUrl       String       @db.Text
+  rawOcrText     String?      @db.LongText
+  extractedJson  Json?
+  confidence     Float?
+  status         ScanStatus   @default(PROCESSING)
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  invoiceScans   InvoiceScan[]
+  supplierScans  SupplierScan[]
+  extractedItems OcrExtractedItem[]
+}
+
+model InvoiceScan {
+  id             String   @id @default(uuid())
+  documentId     String
+  document       Document @relation(fields: [documentId], references: [id])
+  
+  invoiceNumber  String?
+  invoiceDate    DateTime?
+  totalAmount    Float?
+  taxAmount      Float?
+  customerName   String?
+  
+  parsedData     Json?    // Detailed parsed invoice data
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model SupplierScan {
+  id             String   @id @default(uuid())
+  documentId     String
+  document       Document @relation(fields: [documentId], references: [id])
+  
+  supplierName   String?
+  gstNumber      String?
+  totalAmount    Float?
+  
+  parsedData     Json?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model OcrExtractedItem {
+  id             String   @id @default(uuid())
+  documentId     String
+  document       Document @relation(fields: [documentId], references: [id])
+  
+  rawText        String
+  matchedProductId String? // Reference to actual inventory product if matched
+  quantity       Float?
+  unitPrice      Float?
+  totalPrice     Float?
+  confidence     Float?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
