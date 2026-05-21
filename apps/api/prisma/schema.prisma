@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
 }
 
 enum Role {
@@ -15,17 +16,6 @@ enum Role {
   VIEWER
 }
 
-enum Unit {
-  PCS
-  KG
-  GM
-  LTR
-  ML
-  BOX
-  PACK
-  DOZEN
-}
-
 enum PaymentMode {
   CASH
   UPI
@@ -34,30 +24,104 @@ enum PaymentMode {
   SPLIT
 }
 
+enum InvoiceType {
+  SALE
+  SALES_RETURN
+}
+
 enum InvoiceStatus {
   DRAFT
   COMPLETED
   CANCELLED
-  RETURNED
 }
 
-enum TransactionType {
+enum UdharTransactionType {
   CREDIT
   PAYMENT
   ADJUSTMENT
+  WRITEOFF
 }
 
-enum InventoryLogType {
+enum InventoryChangeType {
   SALE
   PURCHASE
+  RETURN_IN
+  RETURN_OUT
   ADJUSTMENT
-  RETURN
-  TRANSFER
+  TRANSFER_IN
+  TRANSFER_OUT
+  DAMAGE
+  OPENING
 }
 
 enum ShiftStatus {
   OPEN
   CLOSED
+}
+
+enum ProductUnit {
+  PCS
+  KG
+  GM
+  LTR
+  ML
+  BOX
+  PACK
+  DOZEN
+  BUNDLE
+}
+
+enum GstRate {
+  ZERO
+  FIVE
+  TWELVE
+  EIGHTEEN
+  TWENTYEIGHT
+}
+
+enum NotificationType {
+  LOW_STOCK
+  UDHAR_OVERDUE
+  SHIFT_NOT_CLOSED
+  PAYMENT_RECEIVED
+  LARGE_DISCOUNT
+  SUSPICIOUS_ACTIVITY
+}
+
+model Shop {
+  id        String    @id @default(cuid())
+  name      String
+  address   String?
+  city      String?
+  state     String?
+  pincode   String?
+  phone     String?
+  email     String?
+  gstin     String?
+  logoUrl   String?
+  currency  String    @default("INR")
+  timezone  String    @default("Asia/Kolkata")
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  users             User[]
+  categories        Category[]
+  products          Product[]
+  productBatches    ProductBatch[]
+  suppliers         Supplier[]
+  customers         Customer[]
+  shifts            Shift[]
+  invoices          Invoice[]
+  udharTransactions UdharTransaction[]
+  inventoryLogs     InventoryLog[]
+  auditLogs         AuditLog[]
+  purchaseOrders    PurchaseOrder[]
+  stockTransfersIn  StockTransfer[]    @relation("TransferDestinationShop")
+  stockTransfersOut StockTransfer[]    @relation("TransferSourceShop")
+  notifications     Notification[]
 }
 
 model User {
@@ -69,105 +133,169 @@ model User {
   role           Role
   isActive       Boolean   @default(true)
   shopId         String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  isDeleted      Boolean   @default(false)
   isLocked       Boolean   @default(false)
   lockedUntil    DateTime?
   lastLoginAt    DateTime?
   lastLoginIp    String?
   failedAttempts Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  isDeleted      Boolean   @default(false)
+  deletedAt      DateTime?
 
-  shop              Shop?              @relation("ShopOwner")
-  shopEmployee      Shop?              @relation("ShopEmployees", fields: [shopId], references: [id], onDelete: Restrict)
-  invoices          Invoice[]
-  udharTransactions UdharTransaction[]
-  inventoryLogs     InventoryLog[]
+  shop              Shop?              @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  refreshTokens     RefreshToken[]
+  loginAttempts     LoginAttempt[]
   shiftsOpened      Shift[]            @relation("ShiftOpenedBy")
   shiftsClosed      Shift[]            @relation("ShiftClosedBy")
-  auditLogs         AuditLog[]
-  refreshTokens     RefreshToken[]
+  invoices          Invoice[]          @relation("InvoiceCashier")
+  udharTransactions UdharTransaction[] @relation("UdharRecordedBy")
+  inventoryLogs     InventoryLog[]     @relation("InventoryRecordedBy")
+  auditLogs         AuditLog[]         @relation("AuditUser")
 
   @@index([shopId])
 }
 
-model Shop {
+model RefreshToken {
   id        String   @id @default(cuid())
-  name      String
-  address   String?
-  city      String?
-  state     String?
-  pincode   String?
-  phone     String?
-  email     String?
-  gstin     String?
-  logoUrl   String?
-  currency  String   @default("INR")
-  timezone  String   @default("Asia/Kolkata")
-  isActive  Boolean  @default(true)
-  ownerId   String   @unique
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  ipAddress String?
+  userAgent String?
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  isDeleted Boolean  @default(false)
 
-  owner             User               @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  employees         User[]             @relation("ShopEmployees")
-  products          Product[]
-  categories        Category[]
-  customers         Customer[]
-  invoices          Invoice[]
-  udharTransactions UdharTransaction[]
-  inventoryLogs     InventoryLog[]
-  shifts            Shift[]
-  auditLogs         AuditLog[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
-model Product {
-  id           String   @id @default(cuid())
-  name         String
-  sku          String
-  barcode      String?
-  description  String?
-  costPrice    Decimal  @db.Decimal(10, 2)
-  sellingPrice Decimal  @db.Decimal(10, 2)
-  mrp          Decimal  @db.Decimal(10, 2)
-  gstRate      Float    @default(18)
-  hsnCode      String?
-  categoryId   String?
-  shopId       String
-  currentStock Int      @default(0)
-  reorderPoint Int      @default(10)
-  reorderQty   Int      @default(50)
-  unit         Unit
-  isActive     Boolean  @default(true)
-  imageUrl     String?
-  aliases      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  isDeleted    Boolean  @default(false)
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  userId    String
+  ipAddress String
+  userAgent String?
+  success   Boolean
+  createdAt DateTime @default(now())
 
-  shop          Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  category      Category?      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  invoiceItems  InvoiceItem[]
-  inventoryLogs InventoryLog[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([shopId, sku])
-  @@index([shopId, categoryId])
+  @@index([email, createdAt])
+  @@index([ipAddress, createdAt])
+  @@index([userId])
 }
 
 model Category {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
   shopId    String
   parentId  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  isDeleted Boolean  @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
 
-  shop          Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  parent        Category?  @relation("SubCategories", fields: [parentId], references: [id], onDelete: Restrict)
+  shop          Shop       @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  parent        Category?  @relation("SubCategories", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   subCategories Category[] @relation("SubCategories")
   products      Product[]
+
+  @@index([shopId])
+  @@index([parentId])
+}
+
+model Product {
+  id             String      @id @default(cuid())
+  name           String
+  sku            String
+  barcode        String?
+  description    String?
+  costPrice      Decimal     @db.Decimal(10, 2)
+  sellingPrice   Decimal     @db.Decimal(10, 2)
+  mrp            Decimal     @db.Decimal(10, 2)
+  wholesalePrice Decimal     @db.Decimal(10, 2)
+  gstRate        GstRate     @default(EIGHTEEN)
+  cessRate       Decimal     @default(0) @db.Decimal(5, 2)
+  hsnCode        String?
+  categoryId     String?
+  shopId         String
+  supplierId     String?
+  currentStock   Decimal     @default(0) @db.Decimal(10, 3)
+  reorderPoint   Decimal     @default(10) @db.Decimal(10, 3)
+  reorderQty     Decimal     @default(50) @db.Decimal(10, 3)
+  unit           ProductUnit
+  hasExpiry      Boolean     @default(false)
+  isActive       Boolean     @default(true)
+  imageUrl       String?
+  aliases        String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  isDeleted      Boolean     @default(false)
+  deletedAt      DateTime?
+
+  shop               Shop                @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  category           Category?           @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  supplier           Supplier?           @relation(fields: [supplierId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  batches            ProductBatch[]
+  invoiceItems       InvoiceItem[]
+  inventoryLogs      InventoryLog[]
+  purchaseOrderItems PurchaseOrderItem[]
+  stockTransferItems StockTransferItem[]
+
+  @@unique([shopId, sku, deletedAt])
+  @@index([shopId])
+  @@index([categoryId])
+  @@index([supplierId])
+  @@fulltext([name, aliases])
+}
+
+model ProductBatch {
+  id           String    @id @default(cuid())
+  productId    String
+  shopId       String
+  batchNumber  String
+  expiryDate   DateTime?
+  costPrice    Decimal   @db.Decimal(10, 2)
+  mrp          Decimal   @db.Decimal(10, 2)
+  sellingPrice Decimal   @db.Decimal(10, 2)
+  initialStock Decimal   @db.Decimal(10, 3)
+  currentStock Decimal   @db.Decimal(10, 3)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  isDeleted    Boolean   @default(false)
+  deletedAt    DateTime?
+
+  product Product @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shop    Shop    @relation(fields: [shopId], references: [id], onDelete: Restrict)
+
+  @@index([productId])
+  @@index([shopId, expiryDate])
+}
+
+model Supplier {
+  id        String    @id @default(cuid())
+  name      String
+  phone     String
+  email     String?
+  gstin     String?
+  address   String?
+  city      String?
+  state     String?
+  shopId    String
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  shop           Shop            @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
+
+  @@unique([shopId, phone, deletedAt])
+  @@index([shopId])
 }
 
 model Customer {
@@ -177,149 +305,196 @@ model Customer {
   email              String?
   address            String?
   city               String?
+  state              String?
   shopId             String
   creditLimit        Decimal   @default(5000) @db.Decimal(10, 2)
   outstandingBalance Decimal   @default(0) @db.Decimal(10, 2)
   totalPurchases     Decimal   @default(0) @db.Decimal(10, 2)
+  totalPaid          Decimal   @default(0) @db.Decimal(10, 2)
   lastPurchaseAt     DateTime?
+  lastPaymentAt      DateTime?
+  tags               String?
   notes              String?
   isActive           Boolean   @default(true)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   isDeleted          Boolean   @default(false)
+  deletedAt          DateTime?
 
-  shop              Shop               @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shop              Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict)
   invoices          Invoice[]
   udharTransactions UdharTransaction[]
 
-  @@unique([shopId, phone])
-  @@index([shopId, phone])
-}
-
-model Invoice {
-  id             String        @id @default(cuid())
-  invoiceNumber  String
-  shopId         String
-  customerId     String?
-  cashierId      String
-  subtotal       Decimal       @db.Decimal(10, 2)
-  taxAmount      Decimal       @db.Decimal(10, 2)
-  discountAmount Decimal       @db.Decimal(10, 2)
-  totalAmount    Decimal       @db.Decimal(10, 2)
-  paidAmount     Decimal       @db.Decimal(10, 2)
-  changeAmount   Decimal       @db.Decimal(10, 2)
-  paymentMode    PaymentMode
-  status         InvoiceStatus
-  notes          String?
-  shiftId        String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  isDeleted      Boolean       @default(false)
-
-  shop              Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict)
-  customer          Customer?          @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  cashier           User               @relation(fields: [cashierId], references: [id], onDelete: Restrict)
-  shift             Shift?             @relation(fields: [shiftId], references: [id], onDelete: Restrict)
-  items             InvoiceItem[]
-  udharTransactions UdharTransaction[]
-  inventoryLogs     InventoryLog[]
-
-  @@unique([shopId, invoiceNumber])
-  @@index([shopId, status])
-  @@index([customerId])
-}
-
-model InvoiceItem {
-  id              String   @id @default(cuid())
-  invoiceId       String
-  productId       String
-  productName     String
-  productSku      String
-  quantity        Float
-  unit            String
-  costPrice       Decimal  @db.Decimal(10, 2)
-  sellingPrice    Decimal  @db.Decimal(10, 2)
-  mrp             Decimal  @db.Decimal(10, 2)
-  discountPercent Float    @default(0)
-  gstRate         Float
-  cgstAmount      Decimal  @db.Decimal(10, 2)
-  sgstAmount      Decimal  @db.Decimal(10, 2)
-  igstAmount      Decimal  @default(0) @db.Decimal(10, 2)
-  totalAmount     Decimal  @db.Decimal(10, 2)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  isDeleted       Boolean  @default(false)
-
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
-}
-
-model UdharTransaction {
-  id            String          @id @default(cuid())
-  customerId    String
-  invoiceId     String?
-  shopId        String
-  type          TransactionType
-  amount        Decimal         @db.Decimal(10, 2)
-  balanceBefore Decimal         @db.Decimal(10, 2)
-  balanceAfter  Decimal         @db.Decimal(10, 2)
-  notes         String?
-  recordedById  String
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  isDeleted     Boolean         @default(false)
-
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  invoice    Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  shop       Shop     @relation(fields: [shopId], references: [id], onDelete: Restrict)
-  recordedBy User     @relation(fields: [recordedById], references: [id], onDelete: Restrict)
-}
-
-model InventoryLog {
-  id             String           @id @default(cuid())
-  productId      String
-  shopId         String
-  type           InventoryLogType
-  quantityBefore Int
-  quantityChange Int
-  quantityAfter  Int
-  invoiceId      String?
-  notes          String?
-  recordedById   String
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  isDeleted      Boolean          @default(false)
-
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  shop       Shop     @relation(fields: [shopId], references: [id], onDelete: Restrict)
-  invoice    Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  recordedBy User     @relation(fields: [recordedById], references: [id], onDelete: Restrict)
+  @@unique([shopId, phone, deletedAt])
+  @@index([shopId])
 }
 
 model Shift {
-  id           String      @id @default(cuid())
-  shopId       String
-  openedById   String
-  closedById   String?
-  openingCash  Decimal     @db.Decimal(10, 2)
-  closingCash  Decimal?    @db.Decimal(10, 2)
-  expectedCash Decimal     @default(0) @db.Decimal(10, 2)
-  status       ShiftStatus @default(OPEN)
-  openedAt     DateTime    @default(now())
-  closedAt     DateTime?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  isDeleted    Boolean     @default(false)
+  id            String      @id @default(cuid())
+  shopId        String
+  openedById    String
+  closedById    String?
+  openingCash   Decimal     @db.Decimal(10, 2)
+  closingCash   Decimal?    @db.Decimal(10, 2)
+  expectedCash  Decimal     @default(0) @db.Decimal(10, 2)
+  totalSales    Decimal     @default(0) @db.Decimal(10, 2)
+  totalReceipts Decimal     @default(0) @db.Decimal(10, 2)
+  cashSales     Decimal     @default(0) @db.Decimal(10, 2)
+  upiSales      Decimal     @default(0) @db.Decimal(10, 2)
+  cardSales     Decimal     @default(0) @db.Decimal(10, 2)
+  udharSales    Decimal     @default(0) @db.Decimal(10, 2)
+  status        ShiftStatus @default(OPEN)
+  openedAt      DateTime    @default(now())
+  closedAt      DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  isDeleted     Boolean     @default(false)
+  deletedAt     DateTime?
 
   shop     Shop      @relation(fields: [shopId], references: [id], onDelete: Restrict)
   openedBy User      @relation("ShiftOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
   closedBy User?     @relation("ShiftClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
   invoices Invoice[]
+
+  @@index([shopId, status])
+  @@index([openedById])
+  @@index([closedById])
+  @@index([shopId, openedAt])
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  invoiceNumber  String
+  financialYear  String
+  shopId         String
+  customerId     String?
+  cashierId      String
+  originalId     String?
+  subtotal       Decimal       @db.Decimal(10, 2)
+  taxableAmount  Decimal       @db.Decimal(10, 2)
+  cgstAmount     Decimal       @db.Decimal(10, 2)
+  sgstAmount     Decimal       @db.Decimal(10, 2)
+  igstAmount     Decimal       @default(0) @db.Decimal(10, 2)
+  taxAmount      Decimal       @db.Decimal(10, 2)
+  discountAmount Decimal       @db.Decimal(10, 2)
+  roundOffAmount Decimal       @default(0) @db.Decimal(10, 2)
+  totalAmount    Decimal       @db.Decimal(10, 2)
+  paidAmount     Decimal       @db.Decimal(10, 2)
+  udharAmount    Decimal       @default(0) @db.Decimal(10, 2)
+  changeAmount   Decimal       @db.Decimal(10, 2)
+  paymentMode    PaymentMode
+  paymentRef     String?
+  isInterState   Boolean       @default(false)
+  type           InvoiceType   @default(SALE)
+  status         InvoiceStatus
+  cancelReason   String?
+  notes          String?
+  shiftId        String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  isDeleted      Boolean       @default(false)
+  deletedAt      DateTime?
+
+  shop              Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  customer          Customer?          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  cashier           User               @relation("InvoiceCashier", fields: [cashierId], references: [id], onDelete: Restrict)
+  shift             Shift?             @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  items             InvoiceItem[]
+  udharTransactions UdharTransaction[]
+  inventoryLogs     InventoryLog[]
+  originalInvoice   Invoice?           @relation("InvoiceReturns", fields: [originalId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  returnInvoices    Invoice[]          @relation("InvoiceReturns")
+
+  @@unique([shopId, financialYear, invoiceNumber])
+  @@index([shopId, status])
+  @@index([customerId])
+  @@index([cashierId])
+  @@index([shiftId])
+  @@index([originalId])
+  @@index([shopId, createdAt])
+}
+
+model InvoiceItem {
+  id              String      @id @default(cuid())
+  invoiceId       String
+  productId       String
+  productName     String
+  productSku      String
+  quantity        Decimal     @db.Decimal(10, 3)
+  unit            ProductUnit
+  costPrice       Decimal     @db.Decimal(10, 2)
+  sellingPrice    Decimal     @db.Decimal(10, 2)
+  mrp             Decimal     @db.Decimal(10, 2)
+  discountPercent Decimal     @default(0) @db.Decimal(5, 2)
+  gstRate         GstRate
+  cgstAmount      Decimal     @db.Decimal(10, 2)
+  sgstAmount      Decimal     @db.Decimal(10, 2)
+  igstAmount      Decimal     @default(0) @db.Decimal(10, 2)
+  totalAmount     Decimal     @db.Decimal(10, 2)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([invoiceId])
+  @@index([productId])
+}
+
+model UdharTransaction {
+  id            String               @id @default(cuid())
+  customerId    String
+  invoiceId     String?
+  shopId        String
+  type          UdharTransactionType
+  amount        Decimal              @db.Decimal(10, 2)
+  balanceBefore Decimal              @db.Decimal(10, 2)
+  balanceAfter  Decimal              @db.Decimal(10, 2)
+  notes         String?
+  recordedById  String
+  createdAt     DateTime             @default(now())
+
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  invoice    Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  shop       Shop     @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  recordedBy User     @relation("UdharRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  @@index([customerId, createdAt])
+  @@index([shopId, type])
+  @@index([invoiceId])
+  @@index([recordedById])
+}
+
+model InventoryLog {
+  id             String              @id @default(cuid())
+  productId      String
+  shopId         String
+  type           InventoryChangeType
+  quantityBefore Decimal             @db.Decimal(10, 3)
+  quantityChange Decimal             @db.Decimal(10, 3)
+  quantityAfter  Decimal             @db.Decimal(10, 3)
+  invoiceId      String?
+  notes          String?
+  recordedById   String
+  createdAt      DateTime            @default(now())
+
+  product    Product  @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shop       Shop     @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  invoice    Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  recordedBy User     @relation("InventoryRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  @@index([productId, createdAt])
+  @@index([shopId, type])
+  @@index([invoiceId])
+  @@index([recordedById])
+  @@index([shopId, createdAt])
 }
 
 model AuditLog {
   id         String   @id @default(cuid())
-  shopId     String
+  shopId     String?
   userId     String
   action     String
   entity     String
@@ -329,34 +504,111 @@ model AuditLog {
   ipAddress  String?
   userAgent  String?
   createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  isDeleted  Boolean  @default(false)
+
+  shop Shop? @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user User  @relation("AuditUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([shopId, entity])
+  @@index([userId, createdAt])
+  @@index([shopId, createdAt])
+}
+
+model PurchaseOrder {
+  id          String    @id @default(cuid())
+  shopId      String
+  supplierId  String
+  orderNumber String
+  status      String
+  totalAmount Decimal   @db.Decimal(10, 2)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+
+  shop     Shop                @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  supplier Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  items    PurchaseOrderItem[]
+
+  @@unique([shopId, orderNumber, deletedAt])
+  @@index([shopId, status])
+  @@index([supplierId])
+}
+
+model PurchaseOrderItem {
+  id              String    @id @default(cuid())
+  purchaseOrderId String
+  productId       String
+  quantity        Decimal   @db.Decimal(10, 3)
+  unitCost        Decimal   @db.Decimal(10, 2)
+  cgstAmount      Decimal   @default(0) @db.Decimal(10, 2)
+  sgstAmount      Decimal   @default(0) @db.Decimal(10, 2)
+  igstAmount      Decimal   @default(0) @db.Decimal(10, 2)
+  totalCost       Decimal   @db.Decimal(10, 2)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  isDeleted       Boolean   @default(false)
+  deletedAt       DateTime?
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+}
+
+model StockTransfer {
+  id                String    @id @default(cuid())
+  sourceShopId      String
+  destinationShopId String
+  status            String
+  totalItems        Int
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  isDeleted         Boolean   @default(false)
+  deletedAt         DateTime?
+
+  sourceShop      Shop                @relation("TransferSourceShop", fields: [sourceShopId], references: [id], onDelete: Restrict)
+  destinationShop Shop                @relation("TransferDestinationShop", fields: [destinationShopId], references: [id], onDelete: Restrict)
+  items           StockTransferItem[]
+
+  @@index([sourceShopId])
+  @@index([destinationShopId])
+}
+
+model StockTransferItem {
+  id              String    @id @default(cuid())
+  stockTransferId String
+  productId       String
+  quantity        Decimal   @db.Decimal(10, 3)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  isDeleted       Boolean   @default(false)
+  deletedAt       DateTime?
+
+  stockTransfer StockTransfer @relation(fields: [stockTransferId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([stockTransferId])
+  @@index([productId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  shopId    String
+  entityId  String?
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  isDeleted Boolean          @default(false)
+  deletedAt DateTime?
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
-}
 
-model RefreshToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  isRevoked Boolean  @default(false)
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-}
-
-model LoginAttempt {
-  id        String   @id @default(cuid())
-  email     String
-  ipAddress String
-  success   Boolean
-  createdAt DateTime @default(now())
-
-  @@index([email, createdAt])
-  @@index([ipAddress, createdAt])
+  @@index([shopId, isRead])
 }
