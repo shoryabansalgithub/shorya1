@@ -1,18 +1,23 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card } from '@/components/ui/Card';
 import { 
   UploadCloud, FileText, Camera, CheckCircle2, AlertCircle, 
   ScanLine, Bot, Sparkles, RefreshCw, Box, Layers, PlayCircle, Edit3, ArrowRight, Save, FileDown, CheckSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '@/components/ui/Toast';
+import { useRouter } from 'next/navigation';
 
 type ScanState = 'IDLE' | 'UPLOADING' | 'SCANNING' | 'MATCHING' | 'SUCCESS';
 
 export default function AiScannerPage() {
   const [scanState, setScanState] = useState<ScanState>('IDLE');
   const [progress, setProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+  const router = useRouter();
 
   // Mock processing simulation
   const handleUpload = () => {
@@ -30,6 +35,20 @@ export default function AiScannerPage() {
         }
       }, 50);
     }, 1000);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleUpload();
+    }
+  };
+
+  const handleSave = () => {
+    toast('Inventory updated & invoice saved successfully!', 'success');
+    setTimeout(() => {
+      setScanState('IDLE');
+      setProgress(0);
+    }, 2000);
   };
 
   return (
@@ -60,9 +79,16 @@ export default function AiScannerPage() {
           >
             {/* Upload Zone */}
             <div 
-              onClick={handleUpload}
+              onClick={() => fileInputRef.current?.click()}
               className="relative overflow-hidden group cursor-pointer bg-white rounded-[24px] border-2 border-dashed border-gray-200 hover:border-[#7C3AED] transition-all duration-500 flex flex-col items-center justify-center p-12 min-h-[400px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] hover:shadow-[0_8px_30px_rgba(124,58,237,0.12)]"
             >
+              <input 
+                type="file" 
+                className="hidden" 
+                ref={fileInputRef} 
+                onChange={handleFileChange}
+                accept="image/*,.pdf"
+              />
               <div className="absolute inset-0 bg-gradient-to-b from-transparent to-purple-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               
               <div className="w-20 h-20 bg-purple-50 rounded-full flex items-center justify-center text-[#7C3AED] group-hover:scale-110 transition-transform duration-500 mb-6 shadow-sm relative z-10">
@@ -72,10 +98,16 @@ export default function AiScannerPage() {
               <p className="text-sm text-gray-500 text-center max-w-xs relative z-10">Upload a handwritten bill, supplier invoice, or take a picture to digitize it.</p>
               
               <div className="flex gap-4 mt-8 relative z-10">
-                <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold shadow-sm hover:border-gray-300 transition-colors">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold shadow-sm hover:border-gray-300 transition-colors"
+                >
                   <FileText size={16} /> Browse Files
                 </button>
-                <button className="flex items-center gap-2 px-5 py-2.5 bg-[#060B26] text-white rounded-xl text-sm font-bold shadow-sm hover:bg-gray-900 transition-colors">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); router.push('/smart-capture'); }}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-[#060B26] text-white rounded-xl text-sm font-bold shadow-sm hover:bg-gray-900 transition-colors"
+                >
                   <Camera size={16} /> Open Camera
                 </button>
               </div>
@@ -191,7 +223,10 @@ export default function AiScannerPage() {
                 >
                   Scan Another
                 </button>
-                <button className="px-4 py-2 bg-[#060B26] text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-900 transition-colors">
+                <button 
+                  onClick={handleSave}
+                  className="px-4 py-2 bg-[#060B26] text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-900 transition-colors"
+                >
                   <Save size={16} /> Save to Database
                 </button>
               </div>
@@ -225,7 +260,7 @@ export default function AiScannerPage() {
                       </div>
                       <div className="text-right">
                         <p className="font-bold text-gray-800 text-sm">2 × ₹14 = ₹28</p>
-                        <button className="text-[#7C3AED] text-xs font-bold hover:underline">Edit</button>
+                        <button onClick={() => toast('Edit item feature coming soon', 'info')} className="text-[#7C3AED] text-xs font-bold hover:underline">Edit</button>
                       </div>
                     </div>
                   </div>
@@ -249,7 +284,7 @@ export default function AiScannerPage() {
                       </div>
                       <div className="text-right">
                         <p className="font-bold text-gray-800 text-sm">1 × ₹210 = ₹210</p>
-                        <button className="text-[#7C3AED] text-xs font-bold hover:underline">Edit</button>
+                        <button onClick={() => toast('Edit item feature coming soon', 'info')} className="text-[#7C3AED] text-xs font-bold hover:underline">Edit</button>
                       </div>
                     </div>
                   </div>
@@ -266,7 +301,10 @@ export default function AiScannerPage() {
                         <AlertCircle size={12} /> Needs Verification
                       </span>
                     </div>
-                    <div className="bg-white border border-orange-200 rounded-lg p-3 flex justify-between items-center shadow-sm">
+                    <div 
+                      onClick={() => toast('Product selection modal coming soon', 'info')}
+                      className="bg-white border border-orange-200 rounded-lg p-3 flex justify-between items-center shadow-sm cursor-pointer hover:border-orange-400 transition-colors"
+                    >
                       <div className="flex items-center gap-3">
                         <div className="w-5 h-5 border border-gray-300 rounded" />
                         <div>
@@ -288,7 +326,10 @@ export default function AiScannerPage() {
                 <Card className="p-0 rounded-[24px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] border border-gray-100 overflow-hidden bg-[#FAFAFA]">
                   <div className="bg-white p-5 border-b border-gray-100 flex justify-between items-center">
                     <h2 className="font-bold text-gray-800">Generated Invoice Preview</h2>
-                    <button className="text-[#7C3AED] text-sm font-bold flex items-center gap-2 hover:underline">
+                    <button 
+                      onClick={() => toast('Downloading PDF...', 'info')}
+                      className="text-[#7C3AED] text-sm font-bold flex items-center gap-2 hover:underline"
+                    >
                       <FileDown size={16} /> Export PDF
                     </button>
                   </div>
@@ -357,7 +398,10 @@ export default function AiScannerPage() {
                   </div>
                 </Card>
 
-                <button className="w-full py-4 bg-gradient-to-r from-[#7C3AED] to-[#4F46E5] text-white rounded-[16px] font-bold text-lg shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex justify-center items-center gap-2">
+                <button 
+                  onClick={handleSave}
+                  className="w-full py-4 bg-gradient-to-r from-[#7C3AED] to-[#4F46E5] text-white rounded-[16px] font-bold text-lg shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex justify-center items-center gap-2"
+                >
                   <Box size={20} /> Update Inventory & Save
                 </button>
               </div>

@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { clsx } from '@/lib/utils';
 import { useAppStore } from '@/store';
+import { Modal } from '@/components/ui/Modal';
+import { useToast } from '@/components/ui/Toast';
 
 const defaultNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -35,6 +37,8 @@ export function Sidebar() {
   
   const [navItems, setNavItems] = useState(defaultNavigation);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -125,15 +129,12 @@ export function Sidebar() {
         <div className="px-6 flex items-center justify-between mb-2">
           <span className="text-[10px] uppercase font-bold tracking-wider text-gray-500">Main Menu</span>
           <button 
-            onClick={() => setIsEditMode(!isEditMode)}
-            className={clsx(
-              "p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs",
-              isEditMode ? "bg-[#8B5CF6] text-white" : "text-gray-500 hover:text-white hover:bg-white/10"
-            )}
+            onClick={() => toast('Menu customisation coming soon in Pro version', 'info')}
+            className="p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs text-gray-500 hover:text-white hover:bg-white/10"
             title="Reorder Menu Items"
           >
-            {isEditMode ? <CheckCircle2 size={12} /> : <SlidersHorizontal size={12} />}
-            {isEditMode ? 'Done' : 'Edit'}
+            <SlidersHorizontal size={12} />
+            Edit
           </button>
         </div>
 
@@ -234,12 +235,61 @@ export function Sidebar() {
             <p className="text-[11px] text-gray-300 mb-4 leading-tight">
               Unlock advanced AI insights, cloud backup & more.
             </p>
-            <button className="w-full bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-bold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-purple-500/30">
+            <button 
+              onClick={() => setIsUpgradeModalOpen(true)}
+              className="w-full bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-bold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-purple-500/30">
               Upgrade Now &rarr;
             </button>
           </div>
         </div>
       </aside>
+
+      <Modal isOpen={isUpgradeModalOpen} onClose={() => setIsUpgradeModalOpen(false)} title="Upgrade to DukaanAI Pro ✨" size="lg">
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="border border-purple-200 dark:border-purple-900/50 bg-purple-50/50 dark:bg-purple-900/10 rounded-xl p-5 relative overflow-hidden text-center cursor-pointer hover:border-purple-500 transition-colors group">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-purple-500" />
+              <h4 className="font-bold text-gray-900 dark:text-white text-lg">Monthly</h4>
+              <p className="text-3xl font-bold text-purple-600 mt-2 mb-1">₹499<span className="text-sm text-gray-500 font-medium">/mo</span></p>
+              <p className="text-xs text-gray-500">Billed monthly</p>
+            </div>
+            <div className="border-2 border-purple-600 bg-purple-50 dark:bg-purple-900/20 rounded-xl p-5 relative overflow-hidden text-center cursor-pointer shadow-lg shadow-purple-500/10">
+              <div className="absolute top-0 right-0 bg-purple-600 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg uppercase tracking-wider">Save 20%</div>
+              <h4 className="font-bold text-gray-900 dark:text-white text-lg">Annual</h4>
+              <p className="text-3xl font-bold text-purple-600 mt-2 mb-1">₹399<span className="text-sm text-gray-500 font-medium">/mo</span></p>
+              <p className="text-xs text-purple-600 font-medium">Billed ₹4,788 yearly</p>
+            </div>
+          </div>
+          
+          <div>
+            <h4 className="font-bold text-sm text-gray-900 dark:text-white mb-3">Pro Features Include:</h4>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                "Advanced AI Insights & Analytics",
+                "Automated Cloud Backup",
+                "AI Voice Billing (Unlimited)",
+                "Multi-shop Management",
+                "Priority 24/7 Support",
+                "Custom Invoice Templates"
+              ].map((feat, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                  <CheckCircle2 size={16} className="text-green-500 shrink-0" />
+                  {feat}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+            <button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition-colors shadow-lg shadow-purple-500/20">
+              Start 7-day Free Trial
+            </button>
+            <button onClick={() => setIsUpgradeModalOpen(false)} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-center font-medium">
+              Maybe later
+            </button>
+          </div>
+        </div>
+      </Modal>
     </>
   );
 }

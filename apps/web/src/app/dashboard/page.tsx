@@ -1,12 +1,17 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   TrendingUp, Package, ShoppingBag, Users, Plus, 
   FileText, Database, ChevronDown, AlertCircle, 
   Search, Mic, Receipt, Sparkles
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
+import { useRouter } from 'next/navigation';
+import { Modal } from '@/components/ui/Modal';
+import { useToast } from '@/components/ui/Toast';
+import { mockProducts, mockCustomers } from '@/data/mockData';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Dummy static charts for UI purposes to perfectly match the screenshot without complex chart setups
 const DummyLineChart = () => (
@@ -52,6 +57,51 @@ const DummyLineChart = () => (
 
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { toast } = useToast();
+  
+  const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
+  const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
+  
+  const [productSearch, setProductSearch] = useState('magi');
+  const [isProductSearchFocused, setIsProductSearchFocused] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setIsProductSearchFocused(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'Create Bill': router.push('/billing'); break;
+      case 'Add Product': setIsAddProductModalOpen(true); break;
+      case 'Add Customer': setIsAddCustomerModalOpen(true); break;
+      case 'Customer Udhar': router.push('/customers'); break;
+      case 'Low Stock': router.push('/inventory?tab=low-stock'); break;
+      case 'Expenses': router.push('/expenses'); break;
+      case 'AI Assistant': router.push('/ai-assistant'); break;
+      case 'Reports': router.push('/analytics'); break;
+      case 'Database Manager': router.push('/database'); break;
+    }
+  };
+
+  const handleAddCustomerSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    toast('Customer added successfully', 'success');
+    setIsAddCustomerModalOpen(false);
+  };
+
+  const filteredProducts = mockProducts.filter(p => 
+    p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
+    p.sku.toLowerCase().includes(productSearch.toLowerCase())
+  ).slice(0, 5);
+
   return (
     <div className="space-y-6">
       
@@ -155,7 +205,11 @@ export default function DashboardPage() {
               { icon: FileText, label: 'Reports', color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/10' },
               { icon: Database, label: 'Database Manager', color: 'text-teal-500', bg: 'bg-teal-500/10' }
             ].map((action, i) => (
-              <div key={i} className="flex flex-col items-center justify-center p-2 rounded-xl bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group text-center h-[76px] relative">
+              <div 
+                key={i} 
+                onClick={() => handleQuickAction(action.label)}
+                className="flex flex-col items-center justify-center p-2 rounded-xl bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group text-center h-[76px] relative"
+              >
                 {action.badge && <span className="absolute -top-2 -right-1 bg-blue-100 text-blue-600 text-[8px] font-bold px-1 rounded">{action.badge}</span>}
                 <div className={`w-8 h-8 rounded-full ${action.bg} ${action.color} flex items-center justify-center mb-1 group-hover:scale-110 transition-transform`}>
                   <action.icon size={14} />
@@ -194,7 +248,9 @@ export default function DashboardPage() {
                 </div>
               </div>
             ))}
-            <button className="w-full mt-2 py-2 rounded-lg border border-[#8B5CF6]/30 text-[#8B5CF6] text-xs font-bold flex items-center justify-center gap-1 hover:bg-[#8B5CF6]/5 transition-colors">
+            <button 
+              onClick={() => setIsAddCustomerModalOpen(true)}
+              className="w-full mt-2 py-2 rounded-lg border border-[#8B5CF6]/30 text-[#8B5CF6] text-xs font-bold flex items-center justify-center gap-1 hover:bg-[#8B5CF6]/5 transition-colors">
               <Plus size={14} /> Add New Customer
             </button>
           </div>
@@ -206,18 +262,63 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Smart Product Search */}
-        <Card className="lg:col-span-3 p-5">
+        <Card className="lg:col-span-3 p-5 relative" ref={searchContainerRef}>
           <h3 className="font-bold text-gray-800 text-[15px] mb-3">Smart Product Search</h3>
           <div className="relative mb-3 flex items-center gap-2">
             <div className="relative flex-1">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8B5CF6]" />
-              <input type="text" value="magi" readOnly className="w-full bg-[#8B5CF6]/10 text-[#8B5CF6] font-semibold text-sm rounded-lg pl-8 pr-16 py-2 outline-none border border-[#8B5CF6]/30" />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <input 
+                type="text" 
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+                onFocus={() => setIsProductSearchFocused(true)}
+                className="w-full bg-[#8B5CF6]/10 text-[#8B5CF6] font-semibold text-sm rounded-lg pl-8 pr-16 py-2 outline-none border border-[#8B5CF6]/30" 
+              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
                 <span className="text-[8px] bg-green-100 text-green-600 px-1 py-0.5 rounded font-bold">Fuzzy Match ON</span>
               </div>
             </div>
-            <button className="p-2 rounded-lg bg-[#8B5CF6] text-white"><Mic size={14} /></button>
+            <button 
+              onClick={() => toast('Voice search activated — say a product name', 'info')}
+              className="p-2 rounded-lg bg-[#8B5CF6] text-white hover:bg-[#7C3AED] transition-colors"
+            >
+              <Mic size={14} />
+            </button>
           </div>
+          
+          <AnimatePresence>
+            {isProductSearchFocused && productSearch && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute left-0 right-0 top-[110px] bg-white border border-gray-100 shadow-xl rounded-xl z-50 overflow-hidden"
+              >
+                {filteredProducts.length > 0 ? (
+                  <div className="py-2">
+                    {filteredProducts.map((p, i) => (
+                      <button 
+                        key={i} 
+                        onClick={() => router.push(`/billing?product=${p.id}`)}
+                        className="w-full flex items-center justify-between text-xs px-4 py-2 hover:bg-purple-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 bg-purple-100 text-purple-600 rounded-sm flex items-center justify-center text-[10px]">P</div>
+                          <span className="font-semibold text-gray-700">{p.name}</span>
+                        </div>
+                        <span className="font-bold text-gray-800">₹{p.price}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="px-4 py-4 text-center text-sm text-gray-500">
+                    No products found.
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="space-y-3 mt-4">
             {[
               { name: 'Maggi 2-Minute (70g)', price: '₹14' },
@@ -232,8 +333,8 @@ export default function DashboardPage() {
                 <span className="font-bold text-gray-800">{p.price}</span>
               </div>
             ))}
-            <button className="w-full mt-2 pt-3 border-t border-gray-100 text-[#8B5CF6] text-xs font-bold flex items-center gap-1">
-              <Sparkles size={14} /> Create New Product "magi"
+            <button className="w-full mt-2 pt-3 border-t border-gray-100 text-[#8B5CF6] text-xs font-bold flex items-center gap-1 hover:text-[#7C3AED] transition-colors">
+              <Sparkles size={14} /> Create New Product "{productSearch || "magi"}"
             </button>
           </div>
         </Card>
@@ -401,6 +502,43 @@ export default function DashboardPage() {
         </Card>
 
       </div>
+
+      <Modal isOpen={isAddProductModalOpen} onClose={() => setIsAddProductModalOpen(false)} title="Add New Product" size="lg">
+        <form onSubmit={(e) => { e.preventDefault(); toast('Product added successfully', 'success'); setIsAddProductModalOpen(false); }} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="text-sm font-medium">Name *</label><input required className="w-full mt-1 border rounded-lg p-2" /></div>
+            <div><label className="text-sm font-medium">SKU (Auto-gen)</label><input defaultValue="PRD008" readOnly className="w-full mt-1 border rounded-lg p-2 bg-gray-50" /></div>
+            <div><label className="text-sm font-medium">Category</label><input className="w-full mt-1 border rounded-lg p-2" /></div>
+            <div><label className="text-sm font-medium">GST Rate</label><select className="w-full mt-1 border rounded-lg p-2"><option>0%</option><option>5%</option><option>12%</option><option>18%</option><option>28%</option></select></div>
+            <div><label className="text-sm font-medium">Cost Price (₹)</label><input type="number" required className="w-full mt-1 border rounded-lg p-2" /></div>
+            <div><label className="text-sm font-medium">Selling Price (₹)</label><input type="number" required className="w-full mt-1 border rounded-lg p-2" /></div>
+            <div><label className="text-sm font-medium">MRP (₹)</label><input type="number" className="w-full mt-1 border rounded-lg p-2" /></div>
+            <div><label className="text-sm font-medium">Opening Stock</label><input type="number" defaultValue="0" className="w-full mt-1 border rounded-lg p-2" /></div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <button type="button" onClick={() => setIsAddProductModalOpen(false)} className="px-4 py-2 border rounded-lg">Cancel</button>
+            <button type="submit" className="px-4 py-2 bg-[#8B5CF6] text-white rounded-lg">Save Product</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={isAddCustomerModalOpen} onClose={() => setIsAddCustomerModalOpen(false)} title="Add New Customer" size="md">
+        <form onSubmit={handleAddCustomerSubmit} className="space-y-4">
+          <div><label className="text-sm font-medium">Name *</label><input required className="w-full mt-1 border rounded-lg p-2" /></div>
+          <div><label className="text-sm font-medium">Phone *</label><input required pattern="[0-9]{10}" maxLength={10} className="w-full mt-1 border rounded-lg p-2" /></div>
+          <div><label className="text-sm font-medium">Email (Optional)</label><input type="email" className="w-full mt-1 border rounded-lg p-2" /></div>
+          <div><label className="text-sm font-medium">Address (Optional)</label><textarea className="w-full mt-1 border rounded-lg p-2" /></div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="text-sm font-medium">Credit Limit (₹)</label><input type="number" defaultValue="5000" className="w-full mt-1 border rounded-lg p-2" /></div>
+            <div><label className="text-sm font-medium">Opening Udhar</label><input type="number" defaultValue="0" className="w-full mt-1 border rounded-lg p-2" /></div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <button type="button" onClick={() => setIsAddCustomerModalOpen(false)} className="px-4 py-2 border rounded-lg">Cancel</button>
+            <button type="submit" className="px-4 py-2 bg-[#8B5CF6] text-white rounded-lg">Save Customer</button>
+          </div>
+        </form>
+      </Modal>
+
     </div>
   );
 }

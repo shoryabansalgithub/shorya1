@@ -6,10 +6,15 @@ import {
   Camera, X, Zap, Image as ImageIcon, ScanLine, FileText, CheckCircle2, 
   ArrowLeft, Search, User, UploadCloud, Database, HardDrive, ShieldCheck
 } from 'lucide-react';
+import { mockCustomers } from '@/data/mockData';
+import { useToast } from '@/components/ui/Toast';
+import { useRouter } from 'next/navigation';
 
 export default function SmartCapturePage() {
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState(mockCustomers);
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
+  const { toast } = useToast();
+  const router = useRouter();
   
   // Camera & Capture State
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -22,28 +27,15 @@ export default function SmartCapturePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  useEffect(() => {
-    fetch('/api/customers')
-      .then(res => res.json())
-      .then(data => {
-        if (data) {
-          setCustomers(data);
-        } else {
-          const mock = [{ id: 1, name: 'Tanish' }, { id: 2, name: 'Ramesh Kumar' }];
-          setCustomers(mock);
-        }
-      })
-      .catch(err => console.error('Failed to fetch customers:', err));
-  }, []);
-
   const selectFolder = async () => {
     try {
       if ('showDirectoryPicker' in window) {
         // @ts-ignore
         const dirHandle = await window.showDirectoryPicker();
         setBackupFolderPath(`[Local Drive]:/${dirHandle.name}`);
+        toast(`Local backup folder set to ${dirHandle.name}`, 'success');
       } else {
-        alert('Your browser does not support selecting local folders. Please use Google Chrome or Edge.');
+        toast('Your browser does not support selecting local folders.', 'error');
       }
     } catch (err) {
       console.error('Folder selection cancelled or failed', err);
@@ -64,7 +56,7 @@ export default function SmartCapturePage() {
       }
     } catch (err) {
       console.error('Error accessing camera:', err);
-      alert('Camera permission denied or not available on this device.');
+      toast('Camera permission denied or not available.', 'error');
       setIsCameraOpen(false);
     }
   };
@@ -100,6 +92,15 @@ export default function SmartCapturePage() {
   const saveAction = (action: 'photo' | 'pdf' | 'ocr') => {
     setIsProcessing(true);
     
+    // If OCR, redirect to AI Scanner
+    if (action === 'ocr') {
+      setTimeout(() => {
+        toast('Sending to AI Invoice Scanner...', 'info');
+        router.push('/ai-scanner');
+      }, 1500);
+      return;
+    }
+
     // Simulate complex secure saving and local backup
     setTimeout(() => {
       let custName = 'Unknown';
@@ -113,9 +114,9 @@ export default function SmartCapturePage() {
       const baseDir = backupFolderPath.replace(/\/$/, '');
       if (action === 'photo') msg = `Original JPG safely backed up to ${baseDir}/Customers/${custName}/Bills/${year}/Original_Photos/`;
       if (action === 'pdf') msg = `Converted PDF safely backed up to ${baseDir}/Customers/${custName}/Bills/${year}/PDFs/`;
-      if (action === 'ocr') msg = `OCR Processed & JSON backed up to ${baseDir}/Customers/${custName}/Bills/${year}/OCR_Text/`;
 
       setSuccessMsg(msg);
+      toast('Capture saved and backed up successfully!', 'success');
       setIsProcessing(false);
       setCapturedImage(null);
       closeCamera();
@@ -274,7 +275,10 @@ export default function SmartCapturePage() {
           <div className="bg-[#0a0a0a] border-t border-gray-800 p-6 absolute bottom-0 w-full z-20 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
             {!capturedImage ? (
               <div className="flex items-center justify-center gap-12 max-w-md mx-auto pb-4">
-                <button className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors">
+                <button 
+                  onClick={() => toast('Flash enabled', 'info')}
+                  className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+                >
                   <Zap size={20} />
                 </button>
                 <button 
@@ -283,7 +287,10 @@ export default function SmartCapturePage() {
                 >
                   <div className="w-full h-full bg-white rounded-full group-hover:scale-90 transition-transform shadow-[0_0_20px_rgba(255,255,255,0.8)]" />
                 </button>
-                <button className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors">
+                <button 
+                  onClick={() => toast('Opening gallery...', 'info')}
+                  className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+                >
                   <ImageIcon size={20} />
                 </button>
               </div>
@@ -298,7 +305,7 @@ export default function SmartCapturePage() {
                 ) : (
                   <>
                     <div className="flex justify-between items-center mb-6 px-2">
-                      <button onClick={() => setCapturedImage(null)} className="text-white hover:text-red-400 font-bold text-sm bg-white/10 px-4 py-2 rounded-lg">Retake Photo</button>
+                      <button onClick={() => setCapturedImage(null)} className="text-white hover:text-red-400 font-bold text-sm bg-white/10 px-4 py-2 rounded-lg transition-colors">Retake Photo</button>
                       <h4 className="text-white font-bold text-sm bg-[#3b82f6]/20 text-[#3b82f6] px-4 py-2 rounded-lg border border-[#3b82f6]/30">Choose Storage Option</h4>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

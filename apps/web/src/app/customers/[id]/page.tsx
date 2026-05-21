@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
+import { Modal } from '@/components/ui/Modal';
+import { useToast } from '@/components/ui/Toast';
 import { 
   ArrowLeft, Phone, MapPin, Calendar as CalendarIcon, MessageCircle, CreditCard, 
   MoreVertical, ShoppingCart, Banknote, History, FileText, ShieldAlert,
@@ -12,7 +14,16 @@ import {
 export default function CustomerDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const { toast } = useToast();
   const [customer, setCustomer] = useState<any>(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('Overview');
+
+  const handleRecordPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    toast(`Payment recorded for ${customer?.name}`, 'success');
+    setIsPaymentModalOpen(false);
+  };
 
   useEffect(() => {
     if (params.id) {
@@ -90,15 +101,15 @@ export default function CustomerDetailsPage() {
         </div>
 
         <div className="flex items-center gap-3 w-full xl:w-auto">
-          <button className="flex-1 xl:flex-none flex items-center justify-center gap-2 px-4 py-2.5 border border-green-500 text-green-600 rounded-xl text-sm font-bold hover:bg-green-50 transition-colors">
+          <button onClick={() => toast(`WhatsApp Message opened for ${customer.phone}`, 'success')} className="flex-1 xl:flex-none flex items-center justify-center gap-2 px-4 py-2.5 border border-green-500 text-green-600 rounded-xl text-sm font-bold hover:bg-green-50 transition-colors">
             <MessageCircle size={16} />
             Send WhatsApp
           </button>
-          <button className="flex-1 xl:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-50 text-[#8B5CF6] border border-purple-200 rounded-xl text-sm font-bold hover:bg-purple-100 transition-colors">
+          <button onClick={() => setIsPaymentModalOpen(true)} className="flex-1 xl:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-50 text-[#8B5CF6] border border-purple-200 rounded-xl text-sm font-bold hover:bg-purple-100 transition-colors">
             <CreditCard size={16} />
             Add Payment
           </button>
-          <button className="flex items-center justify-center gap-2 px-3 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-50 transition-colors">
+          <button onClick={() => toast('Showing more actions', 'info')} className="flex items-center justify-center gap-2 px-3 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-50 transition-colors">
             More Actions <MoreVertical size={16} />
           </button>
         </div>
@@ -407,54 +418,82 @@ export default function CustomerDetailsPage() {
               </div>
             </div>
 
-            <button className="w-full flex items-center justify-center gap-2 py-2 border border-gray-200 rounded-lg text-sm font-bold text-[#8B5CF6] hover:bg-purple-50 transition-colors">
-              <Download size={16} /> Download All Invoices (PDF)
-            </button>
-          </Card>
+              <button onClick={() => toast('Downloaded all invoices as PDF', 'success')} className="w-full flex items-center justify-center gap-2 py-2 border border-gray-200 rounded-lg text-sm font-bold text-[#8B5CF6] hover:bg-purple-50 transition-colors">
+                <Download size={16} /> Download All Invoices (PDF)
+              </button>
+            </Card>
 
-          {/* Notes Block */}
-          <div className="bg-[#FFFDF0] border border-yellow-200 rounded-2xl p-5 shadow-sm relative">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="font-bold text-gray-800 flex items-center gap-2">
-                <FileText size={16} className="text-yellow-600" />
-                Notes
+            {/* Notes Block */}
+            <div className="bg-[#FFFDF0] border border-yellow-200 rounded-2xl p-5 shadow-sm relative">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="font-bold text-gray-800 flex items-center gap-2">
+                  <FileText size={16} className="text-yellow-600" />
+                  Notes
+                </h2>
+                <button onClick={() => toast('Opening Add Note UI', 'info')} className="text-[#8B5CF6] text-xs font-bold hover:underline flex items-center gap-1">
+                  <Plus size={12} /> Add Note
+                </button>
+              </div>
+              <ul className="text-sm text-gray-700 space-y-2 list-disc pl-5 marker:text-yellow-400">
+                <li>Customer usually pays at month end.</li>
+                <li>Requested 7 days more on 19 May.</li>
+                <li>Good customer, keep relation strong.</li>
+              </ul>
+              <p className="text-[10px] text-gray-400 mt-4">Last updated: 19 May 2026 by Aryan Sharma</p>
+            </div>
+
+            {/* Quick Actions */}
+            <Card className="p-5 border border-gray-100 shadow-sm">
+              <h2 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <AlertCircle size={16} className="text-[#8B5CF6]" />
+                Quick Actions
               </h2>
-              <button className="text-[#8B5CF6] text-xs font-bold hover:underline flex items-center gap-1">
-                <Plus size={12} /> Add Note
-              </button>
-            </div>
-            <ul className="text-sm text-gray-700 space-y-2 list-disc pl-5 marker:text-yellow-400">
-              <li>Customer usually pays at month end.</li>
-              <li>Requested 7 days more on 19 May.</li>
-              <li>Good customer, keep relation strong.</li>
-            </ul>
-            <p className="text-[10px] text-gray-400 mt-4">Last updated: 19 May 2026 by Aryan Sharma</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => toast('WhatsApp reminder sent!', 'success')} className="flex items-center justify-center gap-2 py-2.5 border border-green-500 text-green-600 rounded-lg text-xs font-bold hover:bg-green-50 transition-colors">
+                  <MessageCircle size={14} /> Send WhatsApp Reminder
+                </button>
+                <button onClick={() => toast(`Calling ${customer.phone}...`, 'info')} className="flex items-center justify-center gap-2 py-2.5 border border-purple-200 text-[#8B5CF6] rounded-lg text-xs font-bold hover:bg-purple-50 transition-colors">
+                  <PhoneCall size={14} /> Call Customer
+                </button>
+                <button onClick={() => toast('Payment link sent via SMS', 'success')} className="flex items-center justify-center gap-2 py-2.5 border border-purple-200 text-[#8B5CF6] rounded-lg text-xs font-bold hover:bg-purple-50 transition-colors">
+                  <LinkIcon size={14} /> Send Payment Link
+                </button>
+                <button onClick={() => toast('Customer marked as High Risk', 'error')} className="flex items-center justify-center gap-2 py-2.5 border border-red-500 text-red-500 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors">
+                  <ShieldAlert size={14} /> Mark as High Risk
+                </button>
+              </div>
+            </Card>
+
           </div>
-
-          {/* Quick Actions */}
-          <Card className="p-5 border border-gray-100 shadow-sm">
-            <h2 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <AlertCircle size={16} className="text-[#8B5CF6]" />
-              Quick Actions
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              <button className="flex items-center justify-center gap-2 py-2.5 border border-green-500 text-green-600 rounded-lg text-xs font-bold hover:bg-green-50 transition-colors">
-                <MessageCircle size={14} /> Send WhatsApp Reminder
-              </button>
-              <button className="flex items-center justify-center gap-2 py-2.5 border border-purple-200 text-[#8B5CF6] rounded-lg text-xs font-bold hover:bg-purple-50 transition-colors">
-                <PhoneCall size={14} /> Call Customer
-              </button>
-              <button className="flex items-center justify-center gap-2 py-2.5 border border-purple-200 text-[#8B5CF6] rounded-lg text-xs font-bold hover:bg-purple-50 transition-colors">
-                <LinkIcon size={14} /> Send Payment Link
-              </button>
-              <button className="flex items-center justify-center gap-2 py-2.5 border border-red-500 text-red-500 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors">
-                <ShieldAlert size={14} /> Mark as High Risk
-              </button>
-            </div>
-          </Card>
-
         </div>
+
+        {/* Modals */}
+        <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title={`Record Payment - ${customer?.name}`} size="sm">
+          <form onSubmit={handleRecordPayment} className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Amount Received (₹) *</label>
+              <input required type="number" className="w-full mt-1 border rounded-lg p-2 text-lg font-bold" placeholder="0.00" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Payment Mode</label>
+              <select className="w-full mt-1 border rounded-lg p-2">
+                <option>Cash</option>
+                <option>UPI</option>
+                <option>Card</option>
+                <option>Bank Transfer</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Notes (Optional)</label>
+              <textarea className="w-full mt-1 border rounded-lg p-2" placeholder="e.g. Paid for last week's bill" rows={2} />
+            </div>
+            <div className="flex justify-end gap-2 pt-4 border-t mt-6">
+              <button type="button" onClick={() => setIsPaymentModalOpen(false)} className="px-4 py-2 border rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button type="submit" className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-green-500/30">Record Payment</button>
+            </div>
+          </form>
+        </Modal>
+
       </div>
-    </div>
   );
 }

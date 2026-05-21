@@ -10,8 +10,8 @@ export function RootLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background">
       <Sidebar />
       <Navbar />
-      <main className="pt-16 md:ml-64">
-        <div className="p-6 max-w-7xl mx-auto">
+      <main className="pt-20 md:pt-16 md:ml-64 min-h-screen">
+        <div className="p-4 md:p-6 pb-24 md:pb-6 max-w-7xl mx-auto">
           {children}
         </div>
       </main>

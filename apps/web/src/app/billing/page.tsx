@@ -1,22 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Search, Plus, Mic, Receipt, IndianRupee, Minus, CheckCircle2, ArrowRight } from 'lucide-react';
+import { mockProducts, mockCustomers } from '@/data/mockData';
+import { Modal } from '@/components/ui/Modal';
+import { useToast } from '@/components/ui/Toast';
+import { motion } from 'framer-motion';
+import { useSearchParams, useRouter } from 'next/navigation';
 
-const DUMMY_PRODUCTS = [
-  { id: 1, name: 'Aashirvaad Atta 5kg', price: 210, barcode: '890123' },
-  { id: 2, name: 'Tata Salt 1kg', price: 24, barcode: '890124' },
-  { id: 3, name: 'Maggi Noodles 140g', price: 14, barcode: '890125' },
-  { id: 4, name: 'Amul Butter 100g', price: 54, barcode: '890126' },
-  { id: 5, name: 'Surf Excel 1kg', price: 130, barcode: '890127' },
-  { id: 6, name: 'Parle G Biscuit', price: 10, barcode: '890128' },
-];
+function BillingContent() {
+  const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-export default function BillingPage() {
   const [cart, setCart] = useState<{product: any, qty: number}[]>([]);
   const [search, setSearch] = useState('');
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState(mockCustomers);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   
   // Right Sidebar State
@@ -24,31 +24,33 @@ export default function BillingPage() {
   const [amountPaid, setAmountPaid] = useState<string>('');
   
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   
   // Custom item state (Left Sidebar)
   const [customAmount, setCustomAmount] = useState('');
   const [customName, setCustomName] = useState('');
 
-  // Load customers on mount
+  // Handle URL query parameters for AI Voice Billing
   useEffect(() => {
-    fetch('/api/customers')
-      .then(res => res.json())
-      .then(data => {
-        if (data) {
-          setCustomers(data);
-        } else {
-          const MOCK = [
-            { id: 1, name: 'Ramesh Kumar', phone: '9876543210', udhar: 12450, status: 'Overdue' }
-          ];
-          setCustomers(MOCK);
-          fetch('/api/customers', {
-            method: 'POST',
-            body: JSON.stringify(MOCK)
-          });
-        }
-      })
-      .catch(err => console.error('Failed to fetch customers:', err));
-  }, []);
+    const addItem = searchParams.get('addItem');
+    const qty = Number(searchParams.get('qty')) || 1;
+    const productId = searchParams.get('product');
+
+    if (addItem) {
+      const product = mockProducts.find(p => p.name.toLowerCase().includes(addItem.toLowerCase()));
+      if (product) {
+        addToCart(product, qty);
+      }
+    }
+    
+    if (productId) {
+      const product = mockProducts.find(p => p.id === productId);
+      if (product) {
+        addToCart(product, 1);
+      }
+    }
+  }, [searchParams]);
 
   // Sync cart total to manualTotal when cart changes
   const cartTotal = cart.reduce((acc, item) => acc + (item.product.price * item.qty), 0);
@@ -60,16 +62,18 @@ export default function BillingPage() {
     }
   }, [cartTotal]);
 
-  const addToCart = (product: any) => {
-    const existing = cart.find(item => item.product.id === product.id);
-    if (existing) {
-      setCart(cart.map(item => item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item));
-    } else {
-      setCart([...cart, { product, qty: 1 }]);
-    }
+  const addToCart = (product: any, quantity: number = 1) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.product.id === product.id);
+      if (existing) {
+        return prev.map(item => item.product.id === product.id ? { ...item, qty: item.qty + quantity } : item);
+      } else {
+        return [...prev, { product, qty: quantity }];
+      }
+    });
   };
 
-  const updateQty = (id: number, delta: number) => {
+  const updateQty = (id: string | number, delta: number) => {
     setCart(cart.map(item => {
       if (item.product.id === id) {
         const newQty = Math.max(0, item.qty + delta);
@@ -91,7 +95,7 @@ export default function BillingPage() {
       barcode: '-'
     };
     
-    addToCart(product);
+    addToCart(product, 1);
     setCustomAmount('');
     setCustomName('');
   };
@@ -105,36 +109,37 @@ export default function BillingPage() {
     
     // Update Udhar if customer selected and there is pending amount
     if (selectedCustomer && pending > 0) {
-      const updatedCustomers = customers.map(c => {
-        if (c.id === selectedCustomer.id) {
-          return { 
-            ...c, 
-            udhar: c.udhar + pending, 
-            status: 'Pending', 
-            lastPayment: new Date().toISOString().split('T')[0] 
-          };
-        }
-        return c;
-      });
-      fetch('/api/customers', {
-        method: 'POST',
-        body: JSON.stringify(updatedCustomers)
-      });
-      setCustomers(updatedCustomers);
+      toast(`Udhar of ₹${pending} added to ${selectedCustomer.name}'s account`, 'info');
     }
 
     // Success State
     setIsSuccess(true);
+    toast('Bill Generated successfully', 'success');
+    
     setTimeout(() => {
       setCart([]);
       setSelectedCustomer(null);
       setManualTotal('');
       setAmountPaid('');
       setIsSuccess(false);
+      router.replace('/billing'); // Clear query params
     }, 2500);
   };
 
-  const filteredProducts = DUMMY_PRODUCTS.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  const startListening = () => {
+    setIsListening(true);
+    setTimeout(() => {
+      setIsListening(false);
+      setIsVoiceModalOpen(false);
+      const p = mockProducts.find(p => p.name.includes('Maggi'));
+      if (p) {
+        addToCart(p, 2);
+        toast('Heard: Add 2 Maggi Noodles → Added to cart', 'success');
+      }
+    }, 2000);
+  };
+
+  const filteredProducts = mockProducts.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
@@ -145,7 +150,10 @@ export default function BillingPage() {
           <p className="text-sm text-gray-500 mt-1">Manage billing and checkout</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm">
+          <button 
+            onClick={() => { setIsVoiceModalOpen(true); startListening(); }}
+            className="bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm"
+          >
             <Mic size={18} className="text-[#8B5CF6]" />
             AI Voice Billing
           </button>
@@ -192,15 +200,15 @@ export default function BillingPage() {
             </div>
             
             {/* Product Quick Grid */}
-            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3 border-b border-gray-100">
+            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 border-b border-gray-100 max-h-[250px] overflow-y-auto scrollbar-hide">
               {filteredProducts.map(prod => (
                 <div 
                   key={prod.id} 
-                  onClick={() => addToCart(prod)}
-                  className="bg-white border border-gray-100 p-4 rounded-xl cursor-pointer hover:border-[#8B5CF6] hover:shadow-sm transition-all group"
+                  onClick={() => addToCart(prod, 1)}
+                  className="bg-white border border-gray-100 p-3 rounded-xl cursor-pointer hover:border-[#8B5CF6] hover:shadow-sm transition-all group"
                 >
-                  <p className="text-sm font-bold text-gray-800 group-hover:text-[#8B5CF6] transition-colors">{prod.name}</p>
-                  <p className="text-xs text-gray-500 mt-1">₹{prod.price}</p>
+                  <p className="text-xs font-bold text-gray-800 group-hover:text-[#8B5CF6] transition-colors truncate" title={prod.name}>{prod.name}</p>
+                  <p className="text-xs text-gray-500 mt-1 font-medium">₹{prod.price}</p>
                 </div>
               ))}
             </div>
@@ -208,13 +216,13 @@ export default function BillingPage() {
             {/* Cart Table */}
             <div className="p-0 min-h-[300px]">
               {cart.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 py-20">
+                <div className="flex flex-col items-center justify-center h-[300px] text-center text-gray-400">
                   <Receipt size={48} className="opacity-20 mb-4" />
-                  <p className="text-sm">Cart is empty. Click products above to add.</p>
+                  <p className="text-sm font-medium">Cart is empty. Click products above to add.</p>
                 </div>
               ) : (
                 <table className="w-full text-left text-sm text-gray-600">
-                  <thead className="bg-white text-gray-500 text-xs font-semibold border-b border-gray-100">
+                  <thead className="bg-gray-50/50 text-gray-500 text-xs font-bold border-b border-gray-100 uppercase tracking-wider">
                     <tr>
                       <th className="px-5 py-3">Product</th>
                       <th className="px-5 py-3">Price</th>
@@ -226,15 +234,15 @@ export default function BillingPage() {
                     {cart.map(item => (
                       <tr key={item.product.id}>
                         <td className="px-5 py-4 font-bold text-gray-800">{item.product.name}</td>
-                        <td className="px-5 py-4">₹{item.product.price}</td>
+                        <td className="px-5 py-4 font-medium">₹{item.product.price}</td>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2 bg-gray-50 w-fit rounded-lg border border-gray-100 p-1">
-                            <button onClick={() => updateQty(item.product.id, -1)} className="w-6 h-6 flex items-center justify-center rounded bg-white shadow-sm hover:text-red-500"><Minus size={14}/></button>
-                            <span className="w-6 text-center font-medium">{item.qty}</span>
-                            <button onClick={() => updateQty(item.product.id, 1)} className="w-6 h-6 flex items-center justify-center rounded bg-white shadow-sm hover:text-green-500"><Plus size={14}/></button>
+                            <button onClick={() => updateQty(item.product.id, -1)} className="w-6 h-6 flex items-center justify-center rounded bg-white shadow-sm hover:text-red-500 transition-colors"><Minus size={14}/></button>
+                            <span className="w-6 text-center font-bold text-gray-800">{item.qty}</span>
+                            <button onClick={() => updateQty(item.product.id, 1)} className="w-6 h-6 flex items-center justify-center rounded bg-white shadow-sm hover:text-green-500 transition-colors"><Plus size={14}/></button>
                           </div>
                         </td>
-                        <td className="px-5 py-4 text-right font-bold text-gray-800">
+                        <td className="px-5 py-4 text-right font-bold text-[#8B5CF6]">
                           ₹{(item.product.price * item.qty).toFixed(2)}
                         </td>
                       </tr>
@@ -254,16 +262,16 @@ export default function BillingPage() {
             {/* Attach Customer (Hidden nicely above steps) */}
             <div className="mb-6">
               <select 
-                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#8B5CF6] text-gray-600"
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-[#8B5CF6] text-gray-700"
                 value={selectedCustomer ? selectedCustomer.id : ''}
                 onChange={(e) => {
-                  const id = Number(e.target.value);
+                  const id = e.target.value;
                   setSelectedCustomer(customers.find(c => c.id === id) || null);
                 }}
               >
                 <option value="">Walk-in Customer (No Udhar)</option>
                 {customers.map(c => (
-                  <option key={c.id} value={c.id}>{c.name} (Udhar: ₹{c.udhar})</option>
+                  <option key={c.id} value={c.id}>{c.name} (Udhar: ₹{c.udharAmount})</option>
                 ))}
               </select>
             </div>
@@ -282,7 +290,7 @@ export default function BillingPage() {
                   value={manualTotal}
                   onChange={(e) => setManualTotal(e.target.value)}
                   placeholder="0.00"
-                  className="w-full bg-white border border-gray-200 rounded-lg pl-8 pr-4 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#8B5CF6]" 
+                  className="w-full bg-white border border-gray-200 rounded-lg pl-8 pr-4 py-2.5 text-sm font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#8B5CF6]" 
                 />
               </div>
             </div>
@@ -301,13 +309,13 @@ export default function BillingPage() {
                   value={amountPaid}
                   onChange={(e) => setAmountPaid(e.target.value)}
                   placeholder="0.00"
-                  className="w-full bg-white border border-gray-200 rounded-lg pl-8 pr-4 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#8B5CF6]" 
+                  className="w-full bg-white border border-gray-200 rounded-lg pl-8 pr-4 py-2.5 text-sm font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#8B5CF6]" 
                 />
               </div>
             </div>
 
             {/* Totals Breakdown */}
-            <div className="space-y-3 mb-6 text-sm font-semibold pl-7 pr-1">
+            <div className="space-y-3 mb-6 text-sm font-bold pl-7 pr-1">
               <div className="flex justify-between text-gray-700">
                 <span>Total Amount</span>
                 <span>₹{displayTotal.toFixed(2)}</span>
@@ -328,7 +336,7 @@ export default function BillingPage() {
               <div className="flex gap-3">
                 <button 
                   onClick={() => setAmountPaid(displayTotal.toString())}
-                  className="flex-1 py-2 border border-green-500 text-green-600 hover:bg-green-50 rounded-lg text-sm font-bold transition-colors"
+                  className="flex-1 py-2 border border-green-500 text-green-600 hover:bg-green-50 rounded-lg text-xs font-bold transition-colors"
                 >
                   Full Payment
                 </button>
@@ -338,7 +346,7 @@ export default function BillingPage() {
                     setManualTotal('');
                     setCart([]);
                   }}
-                  className="flex-1 py-2 border border-red-500 text-red-500 hover:bg-red-50 rounded-lg text-sm font-bold transition-colors"
+                  className="flex-1 py-2 border border-red-500 text-red-500 hover:bg-red-50 rounded-lg text-xs font-bold transition-colors"
                 >
                   Clear
                 </button>
@@ -355,18 +363,57 @@ export default function BillingPage() {
               <button 
                 onClick={handleCheckout}
                 disabled={displayTotal <= 0}
-                className="w-full bg-[#8B5CF6] hover:bg-[#7C3AED] disabled:bg-purple-300 text-white py-3.5 rounded-lg font-bold flex justify-center items-center gap-2 transition-colors shadow-sm"
+                className="w-full bg-[#8B5CF6] hover:bg-[#7C3AED] disabled:bg-purple-300 text-white py-3.5 rounded-lg font-bold flex justify-center items-center gap-2 transition-colors shadow-lg shadow-purple-500/30"
               >
                 Complete Payment <ArrowRight size={18} />
               </button>
             )}
             
-            <p className="text-center text-[10px] text-gray-400 mt-4 flex items-center justify-center gap-1">
+            <p className="text-center text-[10px] text-gray-400 mt-4 flex items-center justify-center gap-1 font-medium">
               🔒 Your data is secure and encrypted
             </p>
           </Card>
         </div>
       </div>
+
+      <Modal isOpen={isVoiceModalOpen} onClose={() => { setIsVoiceModalOpen(false); setIsListening(false); }} size="md">
+        <div className="flex flex-col items-center justify-center py-8 text-center bg-gray-900 rounded-xl -m-6 p-10 relative overflow-hidden text-white">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#8B5CF6]/30 to-transparent pointer-events-none" />
+          
+          <motion.div 
+            animate={{ scale: isListening ? [1, 1.2, 1] : 1 }}
+            transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+            className="w-24 h-24 rounded-full bg-[#8B5CF6] flex items-center justify-center shadow-[0_0_50px_rgba(139,92,246,0.6)] mb-6 z-10"
+          >
+            <Mic size={40} className="text-white" />
+          </motion.div>
+          
+          <h3 className="text-xl font-bold mb-2 z-10">{isListening ? "Listening..." : "Processing..."}</h3>
+          <p className="text-gray-300 text-sm mb-8 z-10">Say a product name and quantity</p>
+          
+          <div className="flex flex-wrap justify-center gap-2 mb-8 z-10">
+            <span className="px-3 py-1 bg-white/10 rounded-full text-xs font-medium border border-white/10">"Add 2 Maggi"</span>
+            <span className="px-3 py-1 bg-white/10 rounded-full text-xs font-medium border border-white/10">"3 Parle G"</span>
+            <span className="px-3 py-1 bg-white/10 rounded-full text-xs font-medium border border-white/10">"Amul Butter 1"</span>
+          </div>
+          
+          <button 
+            onClick={() => { setIsVoiceModalOpen(false); setIsListening(false); }}
+            className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-medium transition-colors z-10 border border-white/10"
+          >
+            Stop Listening
+          </button>
+        </div>
+      </Modal>
+
     </div>
+  );
+}
+
+export default function BillingPage() {
+  return (
+    <Suspense fallback={<div>Loading Billing...</div>}>
+      <BillingContent />
+    </Suspense>
   );
 }
