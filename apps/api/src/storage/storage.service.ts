@@ -1,16 +1,28 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import archiver = require('archiver');
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
   private readonly rootFolder: string = 'C:/Users/kukpo/OneDrive/Desktop/DB of DukanAi';
+  private s3Client: S3Client;
 
-  constructor() {
+  constructor(private configService: ConfigService) {
     this.initializeSystem();
+    
+    this.s3Client = new S3Client({
+      region: this.configService.get<string>('S3_REGION') || 'auto',
+      endpoint: this.configService.get<string>('S3_ENDPOINT'),
+      credentials: {
+        accessKeyId: this.configService.get<string>('S3_ACCESS_KEY') || '',
+        secretAccessKey: this.configService.get<string>('S3_SECRET_KEY') || '',
+      },
+    });
   }
 
   private async initializeSystem() {
@@ -225,7 +237,7 @@ export class StorageService {
       await fs.move(originalFilePath, deletedFilePath, { overwrite: true });
       await this.logAction(`Soft deleted file ${fileName} for customer ${sanitizedName}`);
       return { success: true, newPath: deletedFilePath };
-    } catch (error) {
+    } catch (error: any) {
       await this.logAction(`Failed to delete file ${fileName}: ${error.message}`, 'error');
       throw error;
     }
@@ -264,5 +276,49 @@ export class StorageService {
 
       archive.finalize();
     });
+  }
+
+  async uploadFileToCloud(
+    buffer: Buffer,
+    fileName: string,
+    mimeType: string,
+    folder: 'products' | 'logos' | 'general' = 'general'
+  ): Promise<string> {
+    const bucketName = this.configService.get<string>('S3_BUCKET');
+    if (!bucketName) {
+      throw new Error('S3_BUCKET is not configured in environment variables');
+    }
+
+    const uniqueId = crypto.randomBytes(8).toString('hex');
+    const sanitizedName = this.sanitizeName(path.parse(fileName).name);
+    const ext = path.extname(fileName);
+    const objectKey = `${folder}/${sanitizedName}-${uniqueId}${ext}`;
+
+    const command = new PutObjectCommand({
+      Bucket: bucketName,
+      Key: objectKey,
+      Body: buffer,
+      ContentType: mimeType,
+      // ACL: 'public-read', // Depends on R2/S3 bucket config
+    });
+
+    try {
+      await this.s3Client.send(command);
+      this.logAction(`Uploaded file to cloud: ${objectKey}`);
+      
+      const endpoint = this.configService.get<string>('S3_ENDPOINT');
+      const publicUrlBase = this.configService.get<string>('S3_PUBLIC_URL');
+      
+      if (publicUrlBase) {
+        return `${publicUrlBase}/${objectKey}`;
+      } else {
+        // Fallback generic S3 URL structure
+        const domain = endpoint ? new URL(endpoint).hostname : `s3.amazonaws.com`;
+        return `https://${bucketName}.${domain}/${objectKey}`;
+      }
+    } catch (error: any) {
+      this.logger.error(`Cloud upload failed: ${error.message}`);
+      throw error;
+    }
   }
 }

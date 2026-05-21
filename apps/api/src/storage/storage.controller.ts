@@ -108,5 +108,26 @@ export class StorageController {
     const result = await this.storageService.createBackup(type || 'Daily');
     return result;
   }
+
+  @Post('cloud/upload')
+  @UseInterceptors(AnyFilesInterceptor())
+  async uploadToCloud(
+    @UploadedFiles() files: Array<Express.Multer.File>,
+    @Body('folder') folder: 'products' | 'logos' | 'general'
+  ) {
+    const file = files[0];
+    if (!file) {
+      return { success: false, error: 'No file provided' };
+    }
+
+    const url = await this.storageService.uploadFileToCloud(
+      file.buffer,
+      file.originalname,
+      file.mimetype,
+      folder || 'general'
+    );
+
+    return { success: true, url };
+  }
 }
 

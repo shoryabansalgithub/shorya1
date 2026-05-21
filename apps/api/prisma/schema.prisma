@@ -223,6 +223,7 @@ model Product {
   shopId         String
   supplierId     String?
   currentStock   Decimal     @default(0) @db.Decimal(10, 3)
+  stockVersion   Int         @default(0)
   reorderPoint   Decimal     @default(10) @db.Decimal(10, 3)
   reorderQty     Decimal     @default(50) @db.Decimal(10, 3)
   unit           ProductUnit
@@ -365,6 +366,7 @@ model Shift {
 model Invoice {
   id             String        @id @default(cuid())
   invoiceNumber  String
+  idempotencyKey String?       @unique
   financialYear  String
   shopId         String
   customerId     String?
