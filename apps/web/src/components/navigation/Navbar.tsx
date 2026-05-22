@@ -1,13 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Search, Mic, Sun, MessageCircle, Clock, X, Check } from 'lucide-react';
-import { useAppStore } from '@/store';
+import { Bell, Search, Mic, Sun, MessageCircle, Clock, Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export function Navbar() {
-  const { toggleSidebar } = useAppStore();
   const router = useRouter();
   const { toast } = useToast();
   

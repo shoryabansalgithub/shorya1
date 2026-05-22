@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
-import { Search, Plus, UserPlus, Phone, CreditCard, Calendar as CalendarIcon, Filter, MoreVertical, IndianRupee, Users, X, CheckCircle2, ChevronDown, Receipt } from 'lucide-react';
+import { Search, UserPlus, Calendar as CalendarIcon, Filter, MoreVertical, IndianRupee, Users, ChevronDown, Receipt } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
-import { ToastProvider, useToast } from '@/components/ui/Toast';
+import { useToast } from '@/components/ui/Toast';
 import { SlidingPanel } from '@/components/ui/SlidingPanel';
 import { mockCustomers } from '@/data/mockData';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -29,7 +29,6 @@ export default function CustomersPage() {
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   
   const filterRef = useRef<HTMLDivElement>(null);
-  const actionMenuRef = useRef<HTMLDivElement>(null);
 
   // Filters & Sorting
   const [statusFilter, setStatusFilter] = useState('All');
@@ -76,7 +75,7 @@ export default function CustomersPage() {
   processedCustomers.sort((a, b) => {
     if (sortBy === 'Name') return a.name.localeCompare(b.name);
     if (sortBy === 'Pending Amount') return b.udharAmount - a.udharAmount;
-    if (sortBy === 'Last Payment') return new Date(b.lastPurchase).getTime() - new Date(a.lastPurchase).getTime();
+    if (sortBy === 'Last Payment') return new Date(b.lastPurchase ?? 0).getTime() - new Date(a.lastPurchase ?? 0).getTime();
     return 0;
   });
 
@@ -286,7 +285,7 @@ export default function CustomersPage() {
                         ₹{customer.udharAmount.toLocaleString('en-IN')}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-500">{new Date(customer.lastPurchase).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                    <td className="px-6 py-4 text-gray-500">{customer.lastPurchase ? new Date(customer.lastPurchase).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
                         status === 'Overdue' ? 'bg-red-50 text-red-600' :

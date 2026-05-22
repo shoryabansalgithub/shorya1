@@ -4,8 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/Card';
 import { 
   Users, Plus, Search, Filter, MoreVertical, 
-  UserCircle, Building2, ChevronDown, CheckCircle2, Clock, Wallet, Calculator,
-  TrendingDown, FileText, Activity
+  UserCircle, ChevronDown, CheckCircle2, Clock, Wallet, Calculator,
+  TrendingDown, FileText, Activity, AlertCircle
 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { SlidingPanel } from '@/components/ui/SlidingPanel';

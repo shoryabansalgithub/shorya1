@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Card } from '@/components/ui/Card';
-import { Bell, Settings, CreditCard, User, Shield, Store } from 'lucide-react';
+import { Store } from 'lucide-react';
 
 export default function SettingsPage() {
   return (

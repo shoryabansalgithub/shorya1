@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react';
 import { Card } from '@/components/ui/Card';
 import { 
   UploadCloud, FileText, Camera, CheckCircle2, AlertCircle, 
-  ScanLine, Bot, Sparkles, RefreshCw, Box, Layers, PlayCircle, Edit3, ArrowRight, Save, FileDown, CheckSquare
+  ScanLine, Bot, Sparkles, Box, Layers, Edit3, ArrowRight, Save, FileDown, CheckSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/components/ui/Toast';

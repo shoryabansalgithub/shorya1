@@ -1,22 +1,38 @@
-import { Controller, Request, Post, UseGuards, Get, Body } from '@nestjs/common';
+import { Body, Controller, Get, Post, Request, UseGuards } from '@nestjs/common';
 import { LocalAuthGuard } from './local-auth.guard';
-import { AuthService } from './auth.service';
+import { AuthService, LoginResponseDto } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UsersService } from '../users/users.service';
+import { CreateUserDto } from '../users/dto/create-user.dto';
+import { SafeUserDto } from '../users/dto/safe-user.dto';
+import type { Request as ExpressRequest } from 'express';
+
+interface AuthenticatedRequest extends ExpressRequest {
+  user: SafeUserDto;
+}
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(
-    private authService: AuthService,
-    private usersService: UsersService
+    private readonly authService: AuthService,
+    private readonly usersService: UsersService,
   ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
-  @ApiBody({ schema: { type: 'object', properties: { email: { type: 'string' }, password: { type: 'string' }, name: { type: 'string' }, role: { type: 'string', default: 'ADMIN' } } } })
-  async register(@Body() body: any) {
+  @ApiBody({ type: CreateUserDto })
+  @ApiResponse({ status: 201, type: SafeUserDto })
+  async register(@Body() body: CreateUserDto): Promise<SafeUserDto> {
+    // Security critical: registration must never expose password hashes.
+    // The service returns only SafeUserDto, so Prisma User never leaves the API.
     return this.usersService.create(body);
   }
 
@@ -24,7 +40,7 @@ export class AuthController {
   @Post('login')
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiBody({ schema: { type: 'object', properties: { email: { type: 'string' }, password: { type: 'string' } } } })
-  async login(@Request() req: any) {
+  async login(@Request() req: AuthenticatedRequest): Promise<LoginResponseDto> {
     return this.authService.login(req.user);
   }
 
@@ -32,7 +48,8 @@ export class AuthController {
   @Get('profile')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile' })
-  getProfile(@Request() req: any) {
+  @ApiResponse({ status: 200, type: SafeUserDto })
+  getProfile(@Request() req: AuthenticatedRequest): SafeUserDto {
     return req.user;
   }
 }

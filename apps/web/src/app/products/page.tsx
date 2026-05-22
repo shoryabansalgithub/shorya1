@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/Card';
 import { 
   PackageSearch, Plus, Search, Filter, MoreVertical, 
-  AlertTriangle, CheckCircle2, ChevronDown, PackageOpen, Box, TrendingUp, IndianRupee 
+  AlertTriangle, ChevronDown, PackageOpen, Box, TrendingUp, IndianRupee 
 } from 'lucide-react';
 import { mockProducts } from '@/data/mockData';
 import { Modal } from '@/components/ui/Modal';

@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/Toast';
 import { 
   ArrowLeft, Phone, MapPin, Calendar as CalendarIcon, MessageCircle, CreditCard, 
   MoreVertical, ShoppingCart, Banknote, History, FileText, ShieldAlert,
-  Eye, Download, Link as LinkIcon, PhoneCall, CheckCircle2, AlertCircle, Plus
+  Eye, Download, Link as LinkIcon, PhoneCall, AlertCircle, Plus
 } from 'lucide-react';
 
 export default function CustomerDetailsPage() {
@@ -17,7 +17,6 @@ export default function CustomerDetailsPage() {
   const { toast } = useToast();
   const [customer, setCustomer] = useState<any>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('Overview');
 
   const handleRecordPayment = (e: React.FormEvent) => {
     e.preventDefault();

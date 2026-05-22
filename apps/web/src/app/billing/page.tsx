@@ -16,7 +16,7 @@ function BillingContent() {
 
   const [cart, setCart] = useState<{product: any, qty: number}[]>([]);
   const [search, setSearch] = useState('');
-  const [customers, setCustomers] = useState(mockCustomers);
+  const [customers] = useState(mockCustomers);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   
   // Right Sidebar State

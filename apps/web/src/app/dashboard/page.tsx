@@ -10,7 +10,7 @@ import { Card } from '@/components/ui/Card';
 import { useRouter } from 'next/navigation';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
-import { mockProducts, mockCustomers } from '@/data/mockData';
+import { mockProducts } from '@/data/mockData';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Dummy static charts for UI purposes to perfectly match the screenshot without complex chart setups

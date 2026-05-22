@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Card } from '@/components/ui/Card';
-import { Bell, PackageOpen, AlertTriangle, UserCheck, CheckCircle2 } from 'lucide-react';
+import { PackageOpen, AlertTriangle, UserCheck, CheckCircle2 } from 'lucide-react';
 
 export default function NotificationsPage() {
   const notifs = [

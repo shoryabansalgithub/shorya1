@@ -1,17 +1,17 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card } from '@/components/ui/Card';
 import { 
   Camera, X, Zap, Image as ImageIcon, ScanLine, FileText, CheckCircle2, 
-  ArrowLeft, Search, User, UploadCloud, Database, HardDrive, ShieldCheck
+  User, UploadCloud, Database, HardDrive, ShieldCheck
 } from 'lucide-react';
 import { mockCustomers } from '@/data/mockData';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from 'next/navigation';
 
 export default function SmartCapturePage() {
-  const [customers, setCustomers] = useState(mockCustomers);
+  const [customers] = useState(mockCustomers);
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
   const { toast } = useToast();
   const router = useRouter();

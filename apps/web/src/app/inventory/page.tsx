@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/Card';
 import { 
   ClipboardList, AlertTriangle, AlertOctagon, TrendingDown, 
-  Search, Filter, Plus, FileText, ArrowRightLeft, MoreVertical, Calendar, ChevronDown, PackageMinus
+  Search, Filter, FileText, ArrowRightLeft, MoreVertical, Calendar, ChevronDown, PackageMinus
 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { SlidingPanel } from '@/components/ui/SlidingPanel';

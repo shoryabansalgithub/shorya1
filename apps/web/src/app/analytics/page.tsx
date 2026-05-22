@@ -3,21 +3,18 @@
 import React, { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { 
-  TrendingUp, TrendingDown, Users, Package, Wallet, CreditCard, 
-  Download, Calendar, BarChart3, PieChart as PieChartIcon, Activity, AlertCircle
+  TrendingUp, TrendingDown, Users, Package, Wallet, 
+  Download, Calendar, BarChart3, PieChart as PieChartIcon, Activity
 } from 'lucide-react';
 import { 
-  mockSalesData, mockProductSales, mockCategorySales, 
+  mockSalesData, mockCategorySales, 
   mockPaymentModes, mockCustomerAnalytics 
 } from '@/data/mockData';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
-  BarChart, Bar, PieChart, Pie, Cell, Legend
+  BarChart, Bar, PieChart, Pie, Cell
 } from 'recharts';
 import { useToast } from '@/components/ui/Toast';
-
-const RADIAN = Math.PI / 180;
-const COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
 
 export default function AnalyticsPage() {
   const { toast } = useToast();

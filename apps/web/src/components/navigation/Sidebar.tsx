@@ -36,7 +36,7 @@ export function Sidebar() {
   const { sidebarOpen, toggleSidebar } = useAppStore();
   
   const [navItems, setNavItems] = useState(defaultNavigation);
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [isEditMode] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const { toast } = useToast();
 

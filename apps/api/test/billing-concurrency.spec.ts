@@ -28,7 +28,7 @@ describe('Billing Concurrency', () => {
 
   it('should prevent overselling and allow exactly 1 success out of 5 concurrent requests', async () => {
     // 1. Setup mock data
-    const shop = await prisma.shop.create({ data: { name: 'Test Shop', ownerId: 'test-owner' } });
+    const shop = await prisma.shop.create({ data: { name: 'Test Shop' } });
     const user = await prisma.user.create({ data: { email: 'test@test.com', name: 'Tester', role: 'CASHIER', password: 'pass', shopId: shop.id } });
     
     // Create a product with currentStock = 1
@@ -39,6 +39,7 @@ describe('Billing Concurrency', () => {
         costPrice: 10,
         sellingPrice: 20,
         mrp: 20,
+        wholesalePrice: 18,
         unit: 'PCS',
         currentStock: 1,
         stockVersion: 0,

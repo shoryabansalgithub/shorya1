@@ -60,19 +60,19 @@ export class OcrService {
     };
   }
 
-  private async uploadToCloudinary(buffer: Buffer): Promise<string> {
+  private async uploadToCloudinary(_buffer: Buffer): Promise<string> {
     this.logger.log('Uploading image to Cloudinary...');
     // Implementation goes here
     return 'https://res.cloudinary.com/demo/image/upload/sample.jpg';
   }
 
-  private async callPythonOcrService(imageUrl: string): Promise<string> {
+  private async callPythonOcrService(_imageUrl: string): Promise<string> {
     this.logger.log('Calling Python FastAPI for OpenCV & Tesseract...');
     // const response = await fetch('http://python-ocr-service/scan', { method: 'POST', body: JSON.stringify({ imageUrl }) });
     return "mggi n00dles 140 QTY 2 28.00\natta ashrivad 5k QTY 1 210.00";
   }
 
-  private async parseWithGemini(rawText: string): Promise<any> {
+  private async parseWithGemini(_rawText: string): Promise<any> {
     this.logger.log('Sending raw OCR text to Gemini API for JSON parsing...');
     // Example: prompt Gemini to return clean JSON array of { rawName, qty, price }
     return {

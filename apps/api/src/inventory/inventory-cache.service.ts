@@ -10,7 +10,7 @@ export class InventoryCacheService {
 
   constructor(
     @Inject(CACHE_MANAGER) private cache: Cache,
-    private prisma: PrismaService
+    private prisma: PrismaService,
   ) {
     // Assuming the underlying store exposes the redis client
     // @ts-ignore
@@ -22,18 +22,27 @@ export class InventoryCacheService {
     if (!this.redis) return;
     const products = await this.prisma.product.findMany({
       where: { shopId, isDeleted: false },
-      select: { id: true, currentStock: true }
+      select: { id: true, currentStock: true },
     });
     const pipeline = this.redis.pipeline();
     for (const p of products) {
-      pipeline.set(`stock:${shopId}:${p.id}`, p.currentStock.toNumber(), 'EX', 3600); // 1 hour TTL
+      pipeline.set(
+        `stock:${shopId}:${p.id}`,
+        p.currentStock.toNumber(),
+        'EX',
+        3600,
+      ); // 1 hour TTL
     }
     await pipeline.exec();
   }
 
   // Atomic pre-decrement in Redis (BEFORE the DB transaction)
   // Returns: 'ok' | 'insufficient' | 'cache_miss'
-  async tryDecrementStock(shopId: string, productId: string, quantity: number): Promise<'ok' | 'insufficient' | 'cache_miss'> {
+  async tryDecrementStock(
+    shopId: string,
+    productId: string,
+    quantity: number,
+  ): Promise<'ok' | 'insufficient' | 'cache_miss'> {
     if (!this.redis) return 'cache_miss';
     const key = `stock:${shopId}:${productId}`;
     const exists = await this.redis.exists(key);
@@ -47,7 +56,12 @@ export class InventoryCacheService {
       if current < tonumber(ARGV[1]) then return -1 end
       return redis.call('DECRBY', KEYS[1], ARGV[1])
     `;
-    const result = await this.redis.eval(luaScript, 1, key, quantity.toString());
+    const result = await this.redis.eval(
+      luaScript,
+      1,
+      key,
+      quantity.toString(),
+    );
 
     if (result === -1) return 'insufficient';
     if (result === -2) return 'cache_miss';
@@ -55,14 +69,22 @@ export class InventoryCacheService {
   }
 
   // Called after DB transaction rolls back — restore the Redis counter
-  async restoreStock(shopId: string, productId: string, quantity: number): Promise<void> {
+  async restoreStock(
+    shopId: string,
+    productId: string,
+    quantity: number,
+  ): Promise<void> {
     if (!this.redis) return;
     const key = `stock:${shopId}:${productId}`;
     await this.redis.incrbyfloat(key, quantity); // Support fractional
   }
 
   // Called when stock is manually adjusted — keep Redis in sync
-  async syncStock(shopId: string, productId: string, newStock: number): Promise<void> {
+  async syncStock(
+    shopId: string,
+    productId: string,
+    newStock: number,
+  ): Promise<void> {
     if (!this.redis) return;
     await this.redis.set(`stock:${shopId}:${productId}`, newStock, 'EX', 3600);
   }
