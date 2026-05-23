@@ -34,11 +34,12 @@ export default function CustomerDetailsPage() {
             if (found) {
               setCustomer(found);
             } else {
+              const decodedName = decodeURIComponent(params.id as string);
               setCustomer({
                 id: params.id,
-                name: 'Tanish',
-                phone: '+91 9607-973',
-                udhar: 16420,
+                name: decodedName.startsWith('CUST-') ? 'Unknown Customer' : decodedName,
+                phone: '+91 98765 43210',
+                udhar: Math.floor(Math.random() * 5000) + 1000,
                 status: 'Pending'
               });
             }

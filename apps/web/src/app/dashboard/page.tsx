@@ -224,7 +224,7 @@ export default function DashboardPage() {
         <Card className="lg:col-span-3 p-5">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-bold text-gray-800 text-[15px]">Top Customers (Udhar)</h3>
-            <span className="text-xs text-[#8B5CF6] font-semibold cursor-pointer">View All</span>
+            <span onClick={() => router.push('/customers')} className="text-xs text-[#8B5CF6] font-semibold cursor-pointer">View All</span>
           </div>
           <div className="space-y-4">
             {[
@@ -234,7 +234,7 @@ export default function DashboardPage() {
               { name: 'Neha Singh', phone: '8877665544', amount: '₹2,890' },
               { name: 'Vikram Patel', phone: '7766554433', amount: '₹1,980' }
             ].map((c, i) => (
-              <div key={i} className="flex items-center justify-between">
+              <div key={i} onClick={() => router.push(`/customers/${encodeURIComponent(c.name)}`)} className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 -mx-1 rounded-lg transition-colors">
                 <div className="flex items-center gap-3">
                   <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${c.name}`} className="w-8 h-8 rounded-full bg-gray-100" alt="avatar" />
                   <div>
