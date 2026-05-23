@@ -3,6 +3,9 @@ import { BillingService } from '../src/billing/billing.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ConflictException } from '@nestjs/common';
 import { PaymentMode } from '@prisma/client';
+import { InventoryGateway } from '../src/inventory/inventory.gateway';
+import { InventoryCacheService } from '../src/inventory/inventory-cache.service';
+import { BillingHelpers } from '../src/billing/billing.helpers';
 
 describe('Billing Concurrency', () => {
   let billingService: BillingService;
@@ -16,9 +19,9 @@ describe('Billing Concurrency', () => {
         BillingService,
         PrismaService,
         // Mock the gateway, cache and helpers
-        { provide: 'InventoryGateway', useValue: { broadcastStockUpdate: jest.fn(), broadcastLowStockAlert: jest.fn() } },
-        { provide: 'InventoryCacheService', useValue: { tryDecrementStock: jest.fn().mockResolvedValue('cache_miss'), restoreStock: jest.fn() } },
-        { provide: 'BillingHelpers', useValue: { checkLowStockAlerts: jest.fn() } }
+        { provide: InventoryGateway, useValue: { broadcastStockUpdate: jest.fn(), broadcastLowStockAlert: jest.fn() } },
+        { provide: InventoryCacheService, useValue: { tryDecrementStock: jest.fn().mockResolvedValue('cache_miss'), restoreStock: jest.fn() } },
+        { provide: BillingHelpers, useValue: { checkLowStockAlerts: jest.fn() } }
       ],
     }).compile();
 

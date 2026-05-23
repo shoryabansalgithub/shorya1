@@ -34,9 +34,9 @@ export class BillingService {
       }
     });
 
-    if (products.length !== productIds.length) {
+    if (products.length !== new Set(productIds).size) {
       const foundIds = products.map((p: any) => p.id);
-      const missingIds = productIds.filter(id => !foundIds.includes(id));
+      const missingIds = Array.from(new Set(productIds)).filter(id => !foundIds.includes(id));
       throw new NotFoundException(`Products not found: ${missingIds.join(', ')}`);
     }
 
@@ -201,9 +201,22 @@ export class BillingService {
 
           // Step D: Calculate GST
           const shop = await tx.shop.findUnique({ where: { id: user.shopId }, select: { state: true } });
-          const customer = dto.customerId
-            ? await tx.customer.findUnique({ where: { id: dto.customerId }, select: { state: true, outstandingBalance: true, creditLimit: true } })
-            : null;
+          // Validate Shift
+          if (dto.shiftId) {
+            const shift = await tx.shift.findFirst({
+              where: { id: dto.shiftId, shopId: user.shopId, status: 'OPEN' }
+            });
+            if (!shift) throw new BadRequestException('Shift is invalid, closed, or belongs to another shop.');
+          }
+
+          let customer = null;
+          if (dto.customerId) {
+            customer = await tx.customer.findFirst({
+              where: { id: dto.customerId, shopId: user.shopId },
+              select: { state: true, outstandingBalance: true, creditLimit: true }
+            });
+            if (!customer) throw new NotFoundException('Customer not found or belongs to another shop.');
+          }
 
           const isInterState = customer?.state ? shop!.state !== customer.state : false;
 
@@ -289,6 +302,10 @@ export class BillingService {
             ? finalTotal
             : (dto.paymentMode === 'SPLIT' ? new Decimal(dto.udharAmount ?? 0) : new Decimal(0));
           const paidAmount = finalTotal.minus(udharAmt);
+          if (dto.paymentMode === 'CASH' && dto.cashTendered !== undefined && dto.cashTendered !== null && dto.cashTendered < finalTotal.toNumber()) {
+            throw new BadRequestException('Cash tendered is less than the bill amount.');
+          }
+
           // Change amount: only relevant for cash payments, must not go negative
           const changeAmount = dto.cashTendered
             ? Decimal.max(new Decimal(dto.cashTendered).minus(finalTotal), new Decimal(0)).toDecimalPlaces(2)

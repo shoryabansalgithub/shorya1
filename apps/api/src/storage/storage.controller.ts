@@ -8,6 +8,7 @@ import {
   UploadedFiles,
   UseGuards,
   UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
@@ -71,12 +72,15 @@ function findFile(
 function parseJsonObject(rawJson: string | undefined): Record<string, unknown> {
   if (!rawJson) return {};
 
-  const parsed: unknown = JSON.parse(rawJson);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return {};
+  try {
+    const parsed: unknown = JSON.parse(rawJson);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+    return parsed as Record<string, unknown>;
+  } catch (error) {
+    throw new BadRequestException('Invalid JSON payload');
   }
-
-  return parsed as Record<string, unknown>;
 }
 
 /**
