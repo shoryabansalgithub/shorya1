@@ -59,6 +59,20 @@ enum ShiftStatus {
   CLOSED
 }
 
+enum PurchaseOrderStatus {
+  DRAFT
+  ORDERED
+  RECEIVED
+  CANCELLED
+}
+
+enum StockTransferStatus {
+  PENDING
+  IN_TRANSIT
+  COMPLETED
+  CANCELLED
+}
+
 enum ProductUnit {
   PCS
   KG
@@ -491,7 +505,6 @@ model InventoryLog {
   @@index([shopId, type])
   @@index([invoiceId])
   @@index([recordedById])
-  @@index([shopId, createdAt])
 }
 
 model AuditLog {
@@ -520,7 +533,7 @@ model PurchaseOrder {
   shopId      String
   supplierId  String
   orderNumber String
-  status      String
+  status      PurchaseOrderStatus @default(DRAFT)
   totalAmount Decimal   @db.Decimal(10, 2)
   notes       String?
   createdAt   DateTime  @default(now())
@@ -563,7 +576,7 @@ model StockTransfer {
   id                String    @id @default(cuid())
   sourceShopId      String
   destinationShopId String
-  status            String
+  status            StockTransferStatus @default(PENDING)
   totalItems        Int
   notes             String?
   createdAt         DateTime  @default(now())

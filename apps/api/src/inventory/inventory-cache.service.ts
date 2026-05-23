@@ -1,20 +1,33 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
-import Redis from 'ioredis';
 
 @Injectable()
 export class InventoryCacheService {
-  private redis: Redis;
+  private readonly logger = new Logger(InventoryCacheService.name);
+  private redis: any = null;
 
   constructor(
     @Inject(CACHE_MANAGER) private cache: Cache,
     private prisma: PrismaService,
   ) {
-    // Assuming the underlying store exposes the redis client
-    // @ts-ignore
-    this.redis = this.cache.store.client;
+    // Safely attempt to access the underlying Redis client.
+    // Falls back to null if the cache store is not Redis (e.g., in-memory).
+    try {
+      const cacheAny = this.cache as any;
+      const store = cacheAny.store || cacheAny.stores?.[0];
+      if (store?.client) {
+        this.redis = store.client;
+        this.logger.log('Redis client connected for inventory cache');
+      } else {
+        this.logger.warn(
+          'No Redis client available — inventory cache will use DB-only path',
+        );
+      }
+    } catch {
+      this.logger.warn('Failed to access Redis client from cache store');
+    }
   }
 
   // Warm the cache on startup (load all product stocks into Redis)
@@ -28,7 +41,7 @@ export class InventoryCacheService {
     for (const p of products) {
       pipeline.set(
         `stock:${shopId}:${p.id}`,
-        p.currentStock.toNumber(),
+        p.currentStock.toNumber().toString(),
         'EX',
         3600,
       ); // 1 hour TTL
@@ -48,13 +61,16 @@ export class InventoryCacheService {
     const exists = await this.redis.exists(key);
     if (!exists) return 'cache_miss'; // Fall back to DB-only path
 
-    // Lua script for atomic check-and-decrement
-    // This runs as a single atomic operation in Redis
+    // Lua script for atomic check-and-decrement (float-safe)
+    // Uses GET/SET with float arithmetic instead of integer-only DECRBY
     const luaScript = `
       local current = tonumber(redis.call('GET', KEYS[1]))
-      if current == nil then return -2 end
-      if current < tonumber(ARGV[1]) then return -1 end
-      return redis.call('DECRBY', KEYS[1], ARGV[1])
+      if current == nil then return '-2' end
+      local qty = tonumber(ARGV[1])
+      if current < qty then return '-1' end
+      local newVal = current - qty
+      redis.call('SET', KEYS[1], tostring(newVal))
+      return tostring(newVal)
     `;
     const result = await this.redis.eval(
       luaScript,
@@ -63,8 +79,8 @@ export class InventoryCacheService {
       quantity.toString(),
     );
 
-    if (result === -1) return 'insufficient';
-    if (result === -2) return 'cache_miss';
+    if (result === '-1') return 'insufficient';
+    if (result === '-2') return 'cache_miss';
     return 'ok';
   }
 
@@ -86,6 +102,6 @@ export class InventoryCacheService {
     newStock: number,
   ): Promise<void> {
     if (!this.redis) return;
-    await this.redis.set(`stock:${shopId}:${productId}`, newStock, 'EX', 3600);
+    await this.redis.set(`stock:${shopId}:${productId}`, newStock.toString(), 'EX', 3600);
   }
 }

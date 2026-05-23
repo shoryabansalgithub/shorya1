@@ -1,10 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { InventoryGateway } from '../inventory/inventory.gateway';
 import { InventoryCacheService } from '../inventory/inventory-cache.service';
 import { BillingHelpers } from './billing.helpers';
-import { Prisma } from '@prisma/client';
 import { Decimal } from 'decimal.js';
 
 interface RequestUser {
@@ -15,6 +14,8 @@ interface RequestUser {
 
 @Injectable()
 export class BillingService {
+  private readonly logger = new Logger(BillingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventoryGateway: InventoryGateway,
@@ -27,23 +28,26 @@ export class BillingService {
     const productIds = dto.items.map(i => i.productId);
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds }, shopId: user.shopId, isDeleted: false, isActive: true },
-      select: { id: true, name: true, currentStock: true, stockVersion: true, sellingPrice: true, costPrice: true, gstRate: true, hsnCode: true, unit: true }
+      select: {
+        id: true, name: true, sku: true, currentStock: true, stockVersion: true,
+        sellingPrice: true, costPrice: true, mrp: true, gstRate: true, hsnCode: true, unit: true,
+      }
     });
 
     if (products.length !== productIds.length) {
-      const foundIds = products.map(p => p.id);
+      const foundIds = products.map((p: any) => p.id);
       const missingIds = productIds.filter(id => !foundIds.includes(id));
       throw new NotFoundException(`Products not found: ${missingIds.join(', ')}`);
     }
 
-    const productMap = new Map(products.map(p => [p.id, p]));
+    const productMap = new Map<string, any>(products.map((p: any) => [p.id, p]));
 
     for (const item of dto.items) {
       const product = productMap.get(item.productId)!;
       if (item.quantity <= 0) {
         throw new BadRequestException(`Quantity for ${product.name} must be greater than 0`);
       }
-      if (product.currentStock.lessThan(item.quantity)) {
+      if (product.currentStock.toNumber() < item.quantity) {
         throw new ConflictException({
           message: `Insufficient stock for "${product.name}"`,
           productId: product.id,
@@ -56,7 +60,7 @@ export class BillingService {
     }
 
     // Step A.5: Redis Atomic Pre-check (Layer 3)
-    const decrementedInRedis = [];
+    const decrementedInRedis: Array<{ productId: string; quantity: number }> = [];
     try {
       for (const item of dto.items) {
         const status = await this.inventoryCache.tryDecrementStock(user.shopId, item.productId, item.quantity);
@@ -101,7 +105,7 @@ export class BillingService {
     while (attempt < MAX_RETRIES) {
       attempt++;
       try {
-        const result = await this.prisma.$transaction(async (tx) => {
+        const result = await this.prisma.$transaction(async (tx: any) => {
           // Clear array for each retry attempt
           stockDeductions.length = 0;
 
@@ -133,7 +137,7 @@ export class BillingService {
                 throw new NotFoundException(`Product ${item.productId} not found`);
               }
 
-              if (freshProduct.currentStock.lessThan(item.quantity)) {
+              if (freshProduct.currentStock.toNumber() < item.quantity) {
                 throw new ConflictException({
                   message: `"${freshProduct.name}" is out of stock. Only ${freshProduct.currentStock} unit(s) available.`,
                   productId: item.productId,
@@ -147,19 +151,34 @@ export class BillingService {
               throw new Error('OPTIMISTIC_LOCK_CONFLICT');
             }
 
+            // Use Decimal math to avoid floating-point precision loss
+            const newStock = new Decimal(currentProduct.currentStock.toString())
+              .minus(new Decimal(item.quantity.toString()))
+              .toDecimalPlaces(3);
+
             stockDeductions.push({
               productId: item.productId,
-              newStock: currentProduct.currentStock.toNumber() - item.quantity,
+              newStock: newStock.toNumber(),
               newVersion: currentProduct.stockVersion + 1
             });
           }
           // ━━━ STOCK DEDUCTION COMPLETE ━━━
 
-          // Step C: Generate invoice number
-          const today = new Date();
-          // Indian timezone formatted
-          const dateStr = today.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/(\d+)\/(\d+)\/(\d+)/, '$3$1$2');
-          const financialYear = today.getMonth() >= 3 ? `${today.getFullYear()}-${(today.getFullYear() + 1).toString().slice(2)}` : `${today.getFullYear() - 1}-${today.getFullYear().toString().slice(2)}`;
+          // Step C: Generate invoice number with deterministic date formatting
+          const now = new Date();
+          // Use UTC-based calculation adjusted for IST (+5:30)
+          const istOffset = 5.5 * 60 * 60 * 1000;
+          const istDate = new Date(now.getTime() + istOffset);
+          const year = istDate.getUTCFullYear();
+          const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+          const day = String(istDate.getUTCDate()).padStart(2, '0');
+          const dateStr = `${year}${month}${day}`;
+
+          // Financial year: April to March
+          const istMonth = istDate.getUTCMonth(); // 0-indexed
+          const financialYear = istMonth >= 3
+            ? `${year}-${(year + 1).toString().slice(2)}`
+            : `${year - 1}-${year.toString().slice(2)}`;
 
           const lastInvoice: any[] = await tx.$queryRaw`
             SELECT invoiceNumber FROM Invoice
@@ -172,8 +191,11 @@ export class BillingService {
 
           let sequence = 1;
           if (lastInvoice.length > 0) {
-            const lastSeq = parseInt(lastInvoice[0].invoiceNumber.split('-')[2], 10);
-            sequence = lastSeq + 1;
+            const parts = lastInvoice[0].invoiceNumber.split('-');
+            const lastSeq = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(lastSeq)) {
+              sequence = lastSeq + 1;
+            }
           }
           const invoiceNumber = `INV-${dateStr}-${String(sequence).padStart(5, '0')}`;
 
@@ -220,12 +242,12 @@ export class BillingService {
             return {
               productId: item.productId,
               productName: product.name,
-              productSku: item.productId,
+              productSku: product.sku,
               quantity: qty.toNumber(),
               unit: product.unit,
               costPrice: product.costPrice,
               sellingPrice: product.sellingPrice,
-              mrp: product.sellingPrice,
+              mrp: product.mrp,
               discountPercent: discPct.toNumber(),
               gstRate: product.gstRate,
               cgstAmount: cgstAmt,
@@ -237,7 +259,9 @@ export class BillingService {
 
           const taxableTotal = subtotal.minus(totalDiscount);
           const grandTotal = taxableTotal.plus(totalTax);
-          const roundOff = new Decimal(Math.round(grandTotal.toNumber()) - grandTotal.toNumber()).toDecimalPlaces(2);
+          // Use Decimal rounding instead of Math.round to avoid precision loss
+          const roundedTotal = grandTotal.toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
+          const roundOff = roundedTotal.minus(grandTotal).toDecimalPlaces(2);
           const finalTotal = grandTotal.plus(roundOff);
 
           // Step F: Validate Udhar
@@ -260,6 +284,16 @@ export class BillingService {
             }
           }
 
+          // Calculate payment amounts
+          const udharAmt = dto.paymentMode === 'UDHAR'
+            ? finalTotal
+            : (dto.paymentMode === 'SPLIT' ? new Decimal(dto.udharAmount ?? 0) : new Decimal(0));
+          const paidAmount = finalTotal.minus(udharAmt);
+          // Change amount: only relevant for cash payments, must not go negative
+          const changeAmount = dto.cashTendered
+            ? Decimal.max(new Decimal(dto.cashTendered).minus(finalTotal), new Decimal(0)).toDecimalPlaces(2)
+            : new Decimal(0);
+
           // Step G: Create Invoice
           const invoice = await tx.invoice.create({
             data: {
@@ -277,9 +311,9 @@ export class BillingService {
               taxAmount: totalTax,
               roundOffAmount: roundOff,
               totalAmount: finalTotal,
-              paidAmount: dto.paymentMode === 'UDHAR' ? new Decimal(0) : finalTotal,
-              changeAmount: dto.cashTendered ? new Decimal(dto.cashTendered).minus(finalTotal).toDecimalPlaces(2) : new Decimal(0),
-              udharAmount: dto.paymentMode === 'UDHAR' ? finalTotal : (dto.udharAmount ? new Decimal(dto.udharAmount) : new Decimal(0)),
+              paidAmount,
+              changeAmount,
+              udharAmount: udharAmt,
               isInterState,
               cgstAmount: lineItems.reduce((sum, i) => sum.plus(i.cgstAmount), new Decimal(0)),
               sgstAmount: lineItems.reduce((sum, i) => sum.plus(i.sgstAmount), new Decimal(0)),
@@ -311,7 +345,6 @@ export class BillingService {
 
           // Step I: Udhar Update
           if ((dto.paymentMode === 'UDHAR' || dto.paymentMode === 'SPLIT') && dto.customerId && customer) {
-            const udharAmt = dto.paymentMode === 'UDHAR' ? finalTotal : new Decimal(dto.udharAmount ?? 0);
             if (udharAmt.greaterThan(0)) {
               const currentBalance = new Decimal(customer.outstandingBalance.toString());
               const newBalance = currentBalance.plus(udharAmt);
@@ -351,17 +384,32 @@ export class BillingService {
 
           // Step J: Shift update
           if (dto.shiftId) {
-            const paymentField = {
-              CASH: 'cashSales', UPI: 'upiSales', CARD: 'cardSales', UDHAR: 'udharSales', SPLIT: 'cashSales'
-            }[dto.paymentMode] ?? 'cashSales';
+            // For SPLIT mode, distribute sales across the correct payment buckets
+            if (dto.paymentMode === 'SPLIT') {
+              const cashPortion = paidAmount.toNumber();
+              const udharPortion = udharAmt.toNumber();
+              await tx.shift.update({
+                where: { id: dto.shiftId },
+                data: {
+                  totalSales: { increment: finalTotal.toNumber() },
+                  cashSales: { increment: cashPortion },
+                  udharSales: { increment: udharPortion },
+                }
+              });
+            } else {
+              const paymentFieldMap: Record<string, string> = {
+                CASH: 'cashSales', UPI: 'upiSales', CARD: 'cardSales', UDHAR: 'udharSales',
+              };
+              const paymentField = paymentFieldMap[dto.paymentMode] ?? 'cashSales';
 
-            await tx.shift.update({
-              where: { id: dto.shiftId },
-              data: {
-                totalSales: { increment: finalTotal.toNumber() },
-                [paymentField]: { increment: finalTotal.toNumber() }
-              }
-            });
+              await tx.shift.update({
+                where: { id: dto.shiftId },
+                data: {
+                  totalSales: { increment: finalTotal.toNumber() },
+                  [paymentField]: { increment: finalTotal.toNumber() }
+                }
+              });
+            }
           }
 
           // Step K: Audit Log
@@ -381,7 +429,7 @@ export class BillingService {
         }, {
           timeout: 10000,
           maxWait: 5000,
-          isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted
+          isolationLevel: 'ReadCommitted' as any
         });
 
         this.inventoryGateway.broadcastStockUpdate(user.shopId, stockDeductions);
@@ -391,12 +439,16 @@ export class BillingService {
 
       } catch (error: any) {
         if (error.message === 'OPTIMISTIC_LOCK_CONFLICT' && attempt < MAX_RETRIES) {
+          this.logger.warn(`Optimistic lock conflict on attempt ${attempt}, retrying...`);
           await new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
           const freshProducts = await this.prisma.product.findMany({
             where: { id: { in: productIds }, shopId: user.shopId },
-            select: { id: true, name: true, currentStock: true, stockVersion: true, sellingPrice: true, costPrice: true, gstRate: true, hsnCode: true, unit: true }
+            select: {
+              id: true, name: true, sku: true, currentStock: true, stockVersion: true,
+              sellingPrice: true, costPrice: true, mrp: true, gstRate: true, hsnCode: true, unit: true,
+            }
           });
-          freshProducts.forEach(p => productMap.set(p.id, p as any));
+          freshProducts.forEach((p: any) => productMap.set(p.id, p));
           continue;
         }
 

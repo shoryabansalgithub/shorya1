@@ -17,6 +17,9 @@ export const safeUserSelect = {
 export const userWithPasswordSelect = {
   ...safeUserSelect,
   password: true,
+  isLocked: true,
+  lockedUntil: true,
+  isDeleted: true,
 } satisfies Prisma.UserSelect;
 
 export type SafeUserRecord = Prisma.UserGetPayload<{

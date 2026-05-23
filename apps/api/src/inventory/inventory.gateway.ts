@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -15,15 +15,27 @@ import { Server, Socket } from 'socket.io';
 export class InventoryGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
+  private readonly logger = new Logger(InventoryGateway.name);
+
   @WebSocketServer() server: Server;
 
   handleConnection(client: Socket) {
     const shopId = client.handshake.query.shopId as string;
-    if (shopId) client.join(`shop:${shopId}`);
+    if (shopId) {
+      client.join(`shop:${shopId}`);
+      this.logger.debug(`Client ${client.id} joined shop:${shopId}`);
+    } else {
+      // Reject connections without a shopId — they can't receive meaningful events
+      this.logger.warn(`Client ${client.id} connected without shopId — disconnecting`);
+      client.disconnect(true);
+    }
+    // TODO: Add JWT verification for WebSocket connections.
+    // Extract the token from client.handshake.auth.token or client.handshake.headers.authorization,
+    // verify with JwtService, and validate that the user belongs to the requested shopId.
   }
 
-  handleDisconnect(_client: Socket) {
-    // cleanup
+  handleDisconnect(client: Socket) {
+    this.logger.debug(`Client ${client.id} disconnected`);
   }
 
   broadcastStockUpdate(

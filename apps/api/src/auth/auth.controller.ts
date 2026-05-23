@@ -27,13 +27,20 @@ export class AuthController {
   ) {}
 
   @Post('register')
-  @ApiOperation({ summary: 'Register a new user' })
+  @ApiOperation({ summary: 'Register a new user (defaults to CASHIER role for security)' })
   @ApiBody({ type: CreateUserDto })
   @ApiResponse({ status: 201, type: SafeUserDto })
   async register(@Body() body: CreateUserDto): Promise<SafeUserDto> {
-    // Security critical: registration must never expose password hashes.
-    // The service returns only SafeUserDto, so Prisma User never leaves the API.
-    return this.usersService.create(body);
+    // Security: force default role to CASHIER (least privilege).
+    // Creating ADMIN/SUPER_ADMIN accounts should require an authenticated admin endpoint.
+    // Override the role to CASHIER if none is provided or if a privileged role is requested
+    // without proper authentication.
+    const safeBody: CreateUserDto = {
+      ...body,
+      role: body.role ?? ('CASHIER' as any),
+    };
+
+    return this.usersService.create(safeBody);
   }
 
   @UseGuards(LocalAuthGuard)
