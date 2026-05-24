@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Search, Mic, Sun, MessageCircle, Clock, Check } from 'lucide-react';
+import { Bell, Search, Mic, Sun, Moon, MessageCircle, Clock, Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useTheme } from '@/hooks';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,6 +17,7 @@ export function Navbar() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
+  const { theme, toggleTheme, mounted } = useTheme();
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -106,9 +108,15 @@ export function Navbar() {
 
       {/* Right section */}
       <div className="flex items-center gap-5">
-        <button className="text-gray-400 hover:text-gray-600 transition-colors">
-          <Sun size={20} />
-        </button>
+        {mounted && (
+          <button 
+            onClick={toggleTheme}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+            title="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+        )}
 
         <div className="relative" ref={notifRef}>
           <button 
