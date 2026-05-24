@@ -14,8 +14,40 @@ export default function CustomersPage() {
   const router = useRouter();
   const { toast } = useToast();
   
-  const [customers, setCustomers] = useState(mockCustomers);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        const res = await fetch('http://localhost:3001/customers');
+        if (res.ok) {
+          const data = await res.json();
+          const mappedData = data.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            phone: c.phone,
+            email: c.email || '',
+            address: c.address || '',
+            udharAmount: Number(c.outstandingBalance) || 0,
+            totalSpent: Number(c.totalPurchases) || 0,
+            lastPurchase: c.lastPurchaseAt || null,
+          }));
+          setCustomers(mappedData.length > 0 ? mappedData : mockCustomers);
+        } else {
+          setCustomers(mockCustomers);
+          console.error("Failed to fetch from API, using mock data");
+        }
+      } catch (err) {
+        setCustomers(mockCustomers);
+        console.error("Error fetching customers, using mock data", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchCustomers();
+  }, []);
   
   // Modals & Panels
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
