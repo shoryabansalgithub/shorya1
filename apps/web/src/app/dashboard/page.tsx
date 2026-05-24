@@ -67,10 +67,17 @@ export default function DashboardPage() {
   const [isProductSearchFocused, setIsProductSearchFocused] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
+  const [timeSelection, setTimeSelection] = useState('This Week');
+  const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
+  const timeDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
         setIsProductSearchFocused(false);
+      }
+      if (timeDropdownRef.current && !timeDropdownRef.current.contains(e.target as Node)) {
+        setIsTimeDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -183,8 +190,38 @@ export default function DashboardPage() {
         <Card className="lg:col-span-6 p-5 relative">
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-bold text-gray-800">Sales Overview</h3>
-            <div className="flex items-center gap-1 text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-md border border-gray-100 cursor-pointer">
-              This Week <ChevronDown size={14} />
+            <div ref={timeDropdownRef} className="relative z-20">
+              <div 
+                onClick={() => setIsTimeDropdownOpen(!isTimeDropdownOpen)}
+                className="flex items-center gap-1 text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-md border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
+              >
+                {timeSelection} <ChevronDown size={14} className={`transition-transform ${isTimeDropdownOpen ? 'rotate-180' : ''}`} />
+              </div>
+              
+              <AnimatePresence>
+                {isTimeDropdownOpen && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="absolute right-0 top-full mt-1 bg-white border border-gray-100 shadow-xl rounded-xl z-50 overflow-hidden w-32"
+                  >
+                    {['Today', 'This Week', 'This Month', 'This Year'].map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          setTimeSelection(option);
+                          setIsTimeDropdownOpen(false);
+                          toast(`Showing data for ${option}`, 'info');
+                        }}
+                        className={`w-full text-left text-xs px-4 py-2 hover:bg-purple-50 transition-colors ${timeSelection === option ? 'font-bold text-[#8B5CF6] bg-purple-50/50' : 'text-gray-600'}`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
           <DummyLineChart />
