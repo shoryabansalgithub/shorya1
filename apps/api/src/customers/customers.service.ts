@@ -25,7 +25,7 @@ export class CustomersService {
 
       this.logger.log(`Successfully committed INSERT query to customer table! New ID: ${newCustomer.id}`);
       return newCustomer;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Error occurred while inserting into customer table: ${error.message}`, error.stack);
       throw error;
     }

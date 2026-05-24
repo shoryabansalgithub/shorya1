@@ -21,7 +21,7 @@ export default function CustomersPage() {
   useEffect(() => {
     const fetchCustomers = async () => {
       try {
-        const res = await fetch('http://localhost:3001/customers');
+        const res = await fetch('http://localhost:3002/api/customers');
         if (res.ok) {
           const data = await res.json();
           const mappedData = data.map((c: any) => ({
@@ -120,7 +120,7 @@ export default function CustomersPage() {
     
     try {
       // Connect to the NestJS API
-      const response = await fetch('http://localhost:3001/customers', {
+      const response = await fetch('http://localhost:3002/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -403,7 +403,7 @@ export default function CustomersPage() {
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add New Customer" size="md">
         <form onSubmit={handleSaveCustomer} className="space-y-4">
           <div><label className="text-sm font-medium">Name *</label><input value={newName} onChange={e=>setNewName(e.target.value)} required className="w-full mt-1 border rounded-lg p-2" /></div>
-          <div><label className="text-sm font-medium">Phone *</label><input value={newPhone} onChange={e=>setNewPhone(e.target.value)} required pattern="[0-9]{10}" maxLength={10} className="w-full mt-1 border rounded-lg p-2" /></div>
+          <div><label className="text-sm font-medium">Phone *</label><input value={newPhone} onChange={e=>setNewPhone(e.target.value)} required className="w-full mt-1 border rounded-lg p-2" /></div>
           <div><label className="text-sm font-medium">Email (Optional)</label><input value={newEmail} onChange={e=>setNewEmail(e.target.value)} type="email" className="w-full mt-1 border rounded-lg p-2" /></div>
           <div><label className="text-sm font-medium">Address (Optional)</label><textarea value={newAddress} onChange={e=>setNewAddress(e.target.value)} className="w-full mt-1 border rounded-lg p-2" /></div>
           <div className="grid grid-cols-2 gap-4">
