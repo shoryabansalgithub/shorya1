@@ -71,6 +71,38 @@ export default function DashboardPage() {
   const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
   const timeDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [newName, setNewName] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newAddress, setNewAddress] = useState('');
+  const [newCreditLimit, setNewCreditLimit] = useState('5000');
+  const [newUdhar, setNewUdhar] = useState('0');
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  const fetchCustomers = async () => {
+    try {
+      const res = await fetch('http://localhost:3002/api/customers');
+      if (res.ok) {
+        const data = await res.json();
+        const mappedData = data.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          email: c.email || '',
+          address: c.address || '',
+          udharAmount: Number(c.outstandingBalance) || 0,
+        }));
+        setCustomers(mappedData);
+      }
+    } catch (err) {
+      console.error("Error fetching customers", err);
+    }
+  };
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
@@ -98,10 +130,36 @@ export default function DashboardPage() {
     }
   };
 
-  const handleAddCustomerSubmit = (e: React.FormEvent) => {
+  const handleAddCustomerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast('Customer added successfully', 'success');
-    setIsAddCustomerModalOpen(false);
+    if (!newName.trim() || !newPhone.trim()) return;
+    
+    try {
+      const response = await fetch('http://localhost:3002/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newName,
+          phone: newPhone,
+          email: newEmail,
+          address: newAddress,
+          udharAmount: Number(newUdhar) || 0,
+          creditLimit: Number(newCreditLimit) || 5000,
+          shopId: 'default-shop-id'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create customer');
+      }
+
+      toast('Customer added successfully', 'success');
+      setIsAddCustomerModalOpen(false);
+      setNewName(''); setNewPhone(''); setNewEmail(''); setNewAddress(''); setNewCreditLimit('5000'); setNewUdhar('0');
+      fetchCustomers();
+    } catch (error: any) {
+      toast(`Error saving customer: ${error.message}`, 'error');
+    }
   };
 
   const filteredProducts = mockProducts.filter(p => 
@@ -264,14 +322,8 @@ export default function DashboardPage() {
             <span onClick={() => router.push('/customers')} className="text-xs text-[#8B5CF6] font-semibold cursor-pointer">View All</span>
           </div>
           <div className="space-y-4">
-            {[
-              { name: 'Ramesh Kumar', phone: '9876543210', amount: '₹12,450' },
-              { name: 'Suresh Yadav', phone: '9123456780', amount: '₹8,760' },
-              { name: 'Amit Verma', phone: '9988776655', amount: '₹5,320' },
-              { name: 'Neha Singh', phone: '8877665544', amount: '₹2,890' },
-              { name: 'Vikram Patel', phone: '7766554433', amount: '₹1,980' }
-            ].map((c, i) => (
-              <div key={i} onClick={() => router.push(`/customers/${encodeURIComponent(c.name)}`)} className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 -mx-1 rounded-lg transition-colors">
+            {customers.filter(c => c.udharAmount > 0).sort((a, b) => b.udharAmount - a.udharAmount).slice(0, 5).map((c, i) => (
+              <div key={i} onClick={() => router.push(`/customers/${c.id}`)} className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1 -mx-1 rounded-lg transition-colors">
                 <div className="flex items-center gap-3">
                   <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${c.name}`} className="w-8 h-8 rounded-full bg-gray-100" alt="avatar" />
                   <div>
@@ -280,11 +332,14 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-bold text-red-500">{c.amount}</p>
+                  <p className="text-xs font-bold text-red-500">₹{c.udharAmount.toLocaleString('en-IN')}</p>
                   <p className="text-[10px] text-red-400">Due</p>
                 </div>
               </div>
             ))}
+            {customers.filter(c => c.udharAmount > 0).length === 0 && (
+              <p className="text-xs text-gray-500 py-2 text-center">No pending udhar</p>
+            )}
             <button 
               onClick={() => setIsAddCustomerModalOpen(true)}
               className="w-full mt-2 py-2 rounded-lg border border-[#8B5CF6]/30 text-[#8B5CF6] text-xs font-bold flex items-center justify-center gap-1 hover:bg-[#8B5CF6]/5 transition-colors">
@@ -561,13 +616,13 @@ export default function DashboardPage() {
 
       <Modal isOpen={isAddCustomerModalOpen} onClose={() => setIsAddCustomerModalOpen(false)} title="Add New Customer" size="md">
         <form onSubmit={handleAddCustomerSubmit} className="space-y-4">
-          <div><label className="text-sm font-medium">Name *</label><input required className="w-full mt-1 border rounded-lg p-2" /></div>
-          <div><label className="text-sm font-medium">Phone *</label><input required pattern="[0-9]{10}" maxLength={10} className="w-full mt-1 border rounded-lg p-2" /></div>
-          <div><label className="text-sm font-medium">Email (Optional)</label><input type="email" className="w-full mt-1 border rounded-lg p-2" /></div>
-          <div><label className="text-sm font-medium">Address (Optional)</label><textarea className="w-full mt-1 border rounded-lg p-2" /></div>
+          <div><label className="text-sm font-medium">Name *</label><input value={newName} onChange={e=>setNewName(e.target.value)} required className="w-full mt-1 border rounded-lg p-2" /></div>
+          <div><label className="text-sm font-medium">Phone *</label><input value={newPhone} onChange={e=>setNewPhone(e.target.value)} required pattern="[0-9]{10}" maxLength={10} className="w-full mt-1 border rounded-lg p-2" /></div>
+          <div><label className="text-sm font-medium">Email (Optional)</label><input value={newEmail} onChange={e=>setNewEmail(e.target.value)} type="email" className="w-full mt-1 border rounded-lg p-2" /></div>
+          <div><label className="text-sm font-medium">Address (Optional)</label><textarea value={newAddress} onChange={e=>setNewAddress(e.target.value)} className="w-full mt-1 border rounded-lg p-2" /></div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-sm font-medium">Credit Limit (₹)</label><input type="number" defaultValue="5000" className="w-full mt-1 border rounded-lg p-2" /></div>
-            <div><label className="text-sm font-medium">Opening Udhar</label><input type="number" defaultValue="0" className="w-full mt-1 border rounded-lg p-2" /></div>
+            <div><label className="text-sm font-medium">Credit Limit (₹)</label><input value={newCreditLimit} onChange={e=>setNewCreditLimit(e.target.value)} type="number" className="w-full mt-1 border rounded-lg p-2" /></div>
+            <div><label className="text-sm font-medium">Opening Udhar</label><input value={newUdhar} onChange={e=>setNewUdhar(e.target.value)} type="number" className="w-full mt-1 border rounded-lg p-2" /></div>
           </div>
           <div className="flex justify-end gap-2 pt-4 border-t">
             <button type="button" onClick={() => setIsAddCustomerModalOpen(false)} className="px-4 py-2 border rounded-lg">Cancel</button>
