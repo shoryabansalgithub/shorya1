@@ -24,6 +24,54 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 262.1 83.3% 57.8%;
     --radius: 0.75rem;
+
+    /* Base Colors for Light Mode */
+    --color-white: #ffffff;
+    --color-gray-50: #f9fafb;
+    --color-gray-100: #f3f4f6;
+    --color-gray-200: #e5e7eb;
+    --color-gray-300: #d1d5db;
+    --color-gray-400: #9ca3af;
+    --color-gray-500: #6b7280;
+    --color-gray-600: #4b5563;
+    --color-gray-700: #374151;
+    --color-gray-800: #1f2937;
+    --color-gray-900: #111827;
+  }
+
+  .dark {
+    /* Base Colors Inverted for Dark Mode */
+    --color-white: #111827; /* white -> gray-900 */
+    --color-gray-50: #1f2937; /* gray-50 -> gray-800 */
+    --color-gray-100: #374151; /* gray-100 -> gray-700 */
+    --color-gray-200: #4b5563; /* gray-200 -> gray-600 */
+    --color-gray-300: #6b7280; /* gray-300 -> gray-500 */
+    --color-gray-400: #9ca3af; /* gray-400 -> gray-400 */
+    --color-gray-500: #d1d5db; /* gray-500 -> gray-300 */
+    --color-gray-600: #e5e7eb; /* gray-600 -> gray-200 */
+    --color-gray-700: #f3f4f6; /* gray-700 -> gray-100 */
+    --color-gray-800: #f9fafb; /* gray-800 -> gray-50 */
+    --color-gray-900: #ffffff; /* gray-900 -> white */
+
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 262.1 83.3% 57.8%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 262.1 83.3% 57.8%;
   }
 }
 
