@@ -79,27 +79,45 @@ export default function CustomersPage() {
     return 0;
   });
 
-  const handleSaveCustomer = (e: React.FormEvent) => {
+  const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim() || !newPhone.trim()) return;
     
     const udharAmount = Number(newUdhar) || 0;
-    const newCustomer = {
-      id: Date.now().toString(),
-      name: newName,
-      phone: newPhone,
-      email: newEmail,
-      address: newAddress,
-      udharAmount: udharAmount,
-      totalSpent: 0,
-      lastPurchase: new Date().toISOString().split('T')[0],
-    };
+    const creditLimitAmount = Number(newCreditLimit) || 5000;
     
-    setCustomers([newCustomer, ...customers]);
-    toast('Customer added successfully', 'success');
-    setIsAddModalOpen(false);
-    
-    setNewName(''); setNewPhone(''); setNewEmail(''); setNewAddress(''); setNewCreditLimit('5000'); setNewUdhar('');
+    try {
+      // Connect to the NestJS API
+      const response = await fetch('http://localhost:3001/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newName,
+          phone: newPhone,
+          email: newEmail,
+          address: newAddress,
+          udharAmount: udharAmount,
+          creditLimit: creditLimitAmount,
+          shopId: 'default-shop-id' // Temporary fallback to satisfy Prisma constraint
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create customer in backend');
+      }
+
+      const createdCustomer = await response.json();
+      
+      // Update local state to reflect the change visually
+      setCustomers([createdCustomer, ...customers]);
+      toast('Customer added to MySQL database successfully!', 'success');
+      setIsAddModalOpen(false);
+      
+      setNewName(''); setNewPhone(''); setNewEmail(''); setNewAddress(''); setNewCreditLimit('5000'); setNewUdhar('');
+    } catch (error: any) {
+      console.error('Error saving customer:', error);
+      toast(`Error saving customer: ${error.message}`, 'error');
+    }
   };
 
   const handleRecordPayment = (e: React.FormEvent) => {

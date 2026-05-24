@@ -11,6 +11,7 @@ import { UsersModule } from './users/users.module';
 import { BillingModule } from './billing/billing.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { CacheModule } from '@nestjs/cache-manager';
+import { CustomersModule } from './customers/customers.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { CacheModule } from '@nestjs/cache-manager';
     AuthModule,
     BillingModule,
     InventoryModule,
+    CustomersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
