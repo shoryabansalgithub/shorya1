@@ -1,11 +1,15 @@
-import { Controller, Post, UseInterceptors, UploadedFile, Body, UseGuards, BadRequestException } from '@nestjs/common';
+import { Controller, Post, UseInterceptors, UploadedFile, Body, UseGuards, BadRequestException, Request } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { OcrService } from './ocr.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { Role } from '@prisma/client';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('ocr')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.MANAGER)
 @ApiBearerAuth()
 @Controller('ocr')
 export class OcrController {
@@ -16,13 +20,14 @@ export class OcrController {
   async scanHandwrittenBill(
     @UploadedFile() file: Express.Multer.File,
     @Body('documentType') documentType: string,
+    @Request() req: any,
   ) {
     if (!file) {
       throw new BadRequestException('No file provided');
     }
 
-    // Pass the file buffer to the OCR service
-    const result = await this.ocrService.processDocument(file.buffer, documentType);
+    // Pass the file buffer to the real Gemini OCR service
+    const result = await this.ocrService.processDocument(file.buffer, documentType, req.user.shopId);
     return result;
   }
 }

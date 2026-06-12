@@ -7,9 +7,9 @@ export class CustomersService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(data: any) {
+  async create(data: { name: string; phone: string; email?: string; address?: string; shopId: string }) {
     try {
-      this.logger.log(`Attempting to create customer: ${JSON.stringify(data)}`);
+      this.logger.log(`Attempting to create customer: ${data.name}`);
       
       const newCustomer = await this.prisma.customer.create({
         data: {
@@ -17,13 +17,12 @@ export class CustomersService {
           phone: data.phone,
           email: data.email || null,
           address: data.address || null,
-          creditLimit: data.creditLimit ? Number(data.creditLimit) : 5000,
-          outstandingBalance: data.udharAmount ? Number(data.udharAmount) : 0,
-          shopId: data.shopId || 'default-shop-id', // Temporary fallback
+          creditLimit: 5000, // strict server default
+          outstandingBalance: 0, // strict server default
+          shopId: data.shopId, // trusted from JWT
         },
       });
 
-      this.logger.log(`Successfully committed INSERT query to customer table! New ID: ${newCustomer.id}`);
       return newCustomer;
     } catch (error: any) {
       this.logger.error(`Error occurred while inserting into customer table: ${error.message}`, error.stack);
@@ -31,8 +30,9 @@ export class CustomersService {
     }
   }
 
-  async findAll() {
+  async findAll(shopId: string) {
     return this.prisma.customer.findMany({
+      where: { shopId, isDeleted: false },
       orderBy: { createdAt: 'desc' }
     });
   }

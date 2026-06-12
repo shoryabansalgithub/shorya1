@@ -4,9 +4,9 @@ ALTER TABLE `Product`
   CHECK (`currentStock` >= 0);
 
 -- Prevent stock version from going backwards
-ALTER TABLE `Product`
-  ADD CONSTRAINT `chk_stock_version_positive`
-  CHECK (`stockVersion` >= 0);
+-- ALTER TABLE `Product`
+--   ADD CONSTRAINT `chk_stock_version_positive`
+--   CHECK (`stockVersion` >= 0);
 
 -- Prevent negative quantities on invoice items
 ALTER TABLE `InvoiceItem`

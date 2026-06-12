@@ -102,6 +102,12 @@ enum NotificationType {
   SUSPICIOUS_ACTIVITY
 }
 
+enum DriftStatus {
+  DETECTED
+  REPAIRED
+  FAILED
+}
+
 model Shop {
   id        String    @id @default(cuid())
   name      String
@@ -136,6 +142,8 @@ model Shop {
   stockTransfersIn  StockTransfer[]    @relation("TransferDestinationShop")
   stockTransfersOut StockTransfer[]    @relation("TransferSourceShop")
   notifications     Notification[]
+  ledgerTransactions LedgerTransaction[]
+  inventoryDriftLogs InventoryDriftLog[]
 }
 
 model User {
@@ -258,6 +266,7 @@ model Product {
   inventoryLogs      InventoryLog[]
   purchaseOrderItems PurchaseOrderItem[]
   stockTransferItems StockTransferItem[]
+  inventoryDriftLogs InventoryDriftLog[]
 
   @@unique([shopId, sku, deletedAt])
   @@index([shopId])
@@ -420,6 +429,7 @@ model Invoice {
   inventoryLogs     InventoryLog[]
   originalInvoice   Invoice?           @relation("InvoiceReturns", fields: [originalId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   returnInvoices    Invoice[]          @relation("InvoiceReturns")
+  ledgerTransactions LedgerTransaction[]
 
   @@unique([shopId, financialYear, invoiceNumber])
   @@unique([shopId, idempotencyKey])
@@ -627,4 +637,52 @@ model Notification {
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
 
   @@index([shopId, isRead])
+}
+
+model OutboxEvent {
+  id          String   @id @default(cuid())
+  type        String
+  payload     Json
+  status      String   @default("PENDING") // PENDING, DONE, FAILED
+  error       String?
+  retryCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
+}
+
+model LedgerTransaction {
+  id            String   @id @default(cuid())
+  shopId        String
+  invoiceId     String?
+  type          String   // CREDIT, DEBIT
+  amount        Decimal  @db.Decimal(10, 2)
+  balanceAfter  Decimal  @db.Decimal(10, 2)
+  description   String?
+  createdAt     DateTime @default(now())
+
+  shop    Shop     @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([shopId, createdAt])
+  @@index([invoiceId])
+}
+
+model InventoryDriftLog {
+  id            String      @id @default(cuid())
+  shopId        String
+  productId     String
+  redisValue    Decimal     @db.Decimal(10, 3)
+  databaseValue Decimal     @db.Decimal(10, 3)
+  difference    Decimal     @db.Decimal(10, 3)
+  status        DriftStatus @default(DETECTED)
+  createdAt     DateTime    @default(now())
+  resolvedAt    DateTime?
+
+  shop    Shop    @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([shopId, createdAt])
+  @@index([productId])
 }

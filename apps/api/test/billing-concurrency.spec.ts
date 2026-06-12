@@ -30,15 +30,16 @@ describe('Billing Concurrency', () => {
   });
 
   it('should prevent overselling and allow exactly 1 success out of 5 concurrent requests', async () => {
+    const uniqueSuffix = Date.now().toString() + Math.random().toString().slice(2, 6);
     // 1. Setup mock data
-    const shop = await prisma.shop.create({ data: { name: 'Test Shop' } });
-    const user = await prisma.user.create({ data: { email: 'test@test.com', name: 'Tester', role: 'CASHIER', password: 'pass', shopId: shop.id } });
+    const shop = await prisma.shop.create({ data: { name: `Test Shop ${uniqueSuffix}` } });
+    const user = await prisma.user.create({ data: { email: `test-${uniqueSuffix}@test.com`, name: 'Tester', role: 'CASHIER', password: 'pass', shopId: shop.id } });
     
     // Create a product with currentStock = 1
     const product = await prisma.product.create({
       data: {
-        name: 'Test Product',
-        sku: 'TEST-123',
+        name: `Test Product ${uniqueSuffix}`,
+        sku: `TEST-${uniqueSuffix}`,
         costPrice: 10,
         sellingPrice: 20,
         mrp: 20,
@@ -89,28 +90,38 @@ describe('Billing Concurrency', () => {
   });
 
   it('should test idempotency - prevent duplicate bills on retry', async () => {
-    // 1. Call createInvoice with same idempotencyKey
-    const shopId = (await prisma.shop.findFirst())!.id;
-    const userId = (await prisma.user.findFirst())!.id;
-    const product = await prisma.product.findFirst();
-
-    // Give some stock
-    await prisma.product.update({ where: { id: product!.id }, data: { currentStock: 10 } });
+    const uniqueSuffix = Date.now().toString() + Math.random().toString().slice(2, 6);
+    const shop = await prisma.shop.create({ data: { name: `Test Shop Idem ${uniqueSuffix}` } });
+    const user = await prisma.user.create({ data: { email: `idem-${uniqueSuffix}@test.com`, name: 'Tester', role: 'CASHIER', password: 'pass', shopId: shop.id } });
+    const product = await prisma.product.create({
+      data: {
+        name: `Idem Product ${uniqueSuffix}`,
+        sku: `IDEM-${uniqueSuffix}`,
+        costPrice: 10,
+        sellingPrice: 20,
+        mrp: 20,
+        wholesalePrice: 18,
+        unit: 'PCS',
+        currentStock: 10,
+        stockVersion: 0,
+        shopId: shop.id
+      }
+    });
 
     const dto = {
-      items: [{ productId: product!.id, quantity: 1 }],
+      items: [{ productId: product.id, quantity: 1 }],
       paymentMode: PaymentMode.CASH,
-      idempotencyKey: 'idem-test-123'
+      idempotencyKey: `idem-test-${uniqueSuffix}`
     };
 
-    const firstCall = await billingService.createInvoice(dto, { userId, shopId });
-    const secondCall = await billingService.createInvoice(dto, { userId, shopId });
+    const firstCall = await billingService.createInvoice(dto, { userId: user.id, shopId: shop.id });
+    const secondCall = await billingService.createInvoice(dto, { userId: user.id, shopId: shop.id });
 
     // Assert both return exact same invoice
     expect(firstCall.id).toBe(secondCall.id);
 
     // Assert only 1 Invoice row exists with that key
-    const count = await prisma.invoice.count({ where: { idempotencyKey: 'idem-test-123' } });
+    const count = await prisma.invoice.count({ where: { idempotencyKey: `idem-test-${uniqueSuffix}` } });
     expect(count).toBe(1);
   });
 });

@@ -22,31 +22,25 @@ export class AuthService {
       return null;
     }
 
-    // Check if account is deactivated
-    if (!user.isActive) {
-      throw new UnauthorizedException('Account has been deactivated');
-    }
-
-    // Check if account is locked
-    if (user.isLocked) {
-      if (user.lockedUntil && new Date() < user.lockedUntil) {
-        throw new UnauthorizedException(
-          `Account is locked until ${user.lockedUntil.toISOString()}`,
-        );
-      }
-      // Lock period has expired — allow login (isLocked should be cleared separately)
-    }
-
-    // Check if account is soft-deleted
     if (user.isDeleted) {
+      return null;
+    }
+
+    if (!user.isActive) {
+      return null;
+    }
+
+    if (user.isLocked && user.lockedUntil && new Date() < user.lockedUntil) {
       return null;
     }
 
     const passwordValid = await bcrypt.compare(pass, user.password);
     if (!passwordValid) {
+      await this.usersService.incrementFailedAttempts(user.id);
       return null;
     }
 
+    await this.usersService.resetFailedAttempts(user.id);
     return this.usersService.findSafeById(user.id);
   }
 

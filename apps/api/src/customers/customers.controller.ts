@@ -1,5 +1,6 @@
-import { Controller, Post, Body, Get, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Get, Logger, Request } from '@nestjs/common';
 import { CustomersService } from './customers.service';
+import { CreateCustomerDto } from './dto/create-customer.dto';
 
 @Controller('customers')
 export class CustomersController {
@@ -8,14 +9,20 @@ export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Post()
-  async create(@Body() createCustomerDto: any) {
-    this.logger.log(`Incoming frontend request data to POST /customers: ${JSON.stringify(createCustomerDto)}`);
-    return this.customersService.create(createCustomerDto);
+  async create(@Request() req: any, @Body() dto: CreateCustomerDto) {
+    // Map strictly allowed fields and inject trusted shopId from JWT
+    const safeData = {
+      name: dto.name,
+      phone: dto.phone,
+      email: dto.email,
+      address: dto.address,
+      shopId: req.user.shopId,
+    };
+    return this.customersService.create(safeData);
   }
 
   @Get()
-  async findAll() {
-    this.logger.log('Incoming frontend request to GET /customers');
-    return this.customersService.findAll();
+  async findAll(@Request() req: any) {
+    return this.customersService.findAll(req.user.shopId);
   }
 }

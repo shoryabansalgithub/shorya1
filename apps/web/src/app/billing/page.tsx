@@ -1,4 +1,4 @@
-'use client';
+  'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { Card } from '@/components/ui/Card';
@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { motion } from 'framer-motion';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
 
 function BillingContent() {
   const { toast } = useToast();
@@ -30,6 +31,9 @@ function BillingContent() {
   // Custom item state (Left Sidebar)
   const [customAmount, setCustomAmount] = useState('');
   const [customName, setCustomName] = useState('');
+
+  // ENG-401: Persistent Idempotency Key
+  const { key: idempotencyKey, clearKey } = useIdempotencyKey('new-bill');
 
   // Handle URL query parameters for AI Voice Billing
   useEffect(() => {
@@ -104,26 +108,63 @@ function BillingContent() {
   const paid = Number(amountPaid) || 0;
   const pending = Math.max(0, displayTotal - paid);
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (displayTotal <= 0) return;
+    if (!idempotencyKey) {
+      toast('Idempotency key not initialized. Please refresh.', 'error');
+      return;
+    }
     
     // Update Udhar if customer selected and there is pending amount
     if (selectedCustomer && pending > 0) {
       toast(`Udhar of ₹${pending} added to ${selectedCustomer.name}'s account`, 'info');
     }
 
-    // Success State
-    setIsSuccess(true);
-    toast('Bill Generated successfully', 'success');
-    
-    setTimeout(() => {
-      setCart([]);
-      setSelectedCustomer(null);
-      setManualTotal('');
-      setAmountPaid('');
-      setIsSuccess(false);
-      router.replace('/billing'); // Clear query params
-    }, 2500);
+    try {
+      // Create payload adhering to idempotency rules
+      const payload = {
+        idempotencyKey, // Use the persistent session key
+        customerId: selectedCustomer?.id,
+        paymentMode: pending > 0 ? 'SPLIT' : 'CASH',
+        udharAmount: pending,
+        items: cart.map(c => ({
+          productId: c.product.id,
+          quantity: c.qty
+        }))
+      };
+
+      // Simulated or actual POST request
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/billing/invoice`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Authorization headers should be added here
+        },
+        body: JSON.stringify(payload)
+      });
+
+      // ENG-403: Success cleanup only on 200/201
+      if (res.ok || res.status === 201) {
+        clearKey(); // Burn the persistent key
+        setIsSuccess(true);
+        toast('Bill Generated successfully', 'success');
+        
+        setTimeout(() => {
+          setCart([]);
+          setSelectedCustomer(null);
+          setManualTotal('');
+          setAmountPaid('');
+          setIsSuccess(false);
+          router.replace('/billing'); // Clear query params
+        }, 2500);
+      } else {
+        // HTTP Error (400, 500, etc) - DO NOT clear key
+        toast(`Checkout failed (HTTP ${res.status}). Retrying will use same idempotency key.`, 'error');
+      }
+    } catch (error) {
+      // Network timeout / Gateway error - DO NOT clear key
+      toast('Network failure. Retrying will use same idempotency key.', 'error');
+    }
   };
 
   const startListening = () => {

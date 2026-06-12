@@ -1,6 +1,6 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,
@@ -9,10 +9,44 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
+// ━━━ P0 FIX: Unified isomorphic auth injection ━━━
+// Client: uses next-auth/react getSession()
+// Server: uses next-auth/jwt getToken() with request cookies
+async function resolveToken(): Promise<string | null> {
+  if (typeof window !== 'undefined') {
+    // Client-side: use next-auth/react
+    const { getSession } = await import('next-auth/react');
+    const session = await getSession();
+    return (session as any)?.accessToken ?? null;
+  } else {
+    // Server-side: extract token from NextAuth JWT cookie
+    try {
+      const { cookies } = await import('next/headers');
+      const { getToken } = await import('next-auth/jwt');
+      const cookieStore = await cookies();
+      // Build a minimal request-like object for getToken
+      const req = {
+        cookies: Object.fromEntries(
+          cookieStore.getAll().map((c: any) => [c.name, c.value])
+        ),
+        headers: {},
+      };
+      const token = await getToken({
+        req: req as any,
+        secret: process.env.NEXTAUTH_SECRET,
+      });
+      return (token as any)?.accessToken ?? null;
+    } catch {
+      // If next/headers is unavailable (e.g., build-time), skip silently
+      return null;
+    }
+  }
+}
+
 // Add request interceptor
 apiClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
+  async (config: InternalAxiosRequestConfig) => {
+    const token = await resolveToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -24,14 +58,15 @@ apiClient.interceptors.request.use(
 // Add response interceptor
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Handle unauthorized
-      localStorage.removeItem('token');
-      window.location.href = '/auth/login';
+  async (error) => {
+    if (error.response?.status === 401 && typeof window !== 'undefined') {
+      // Handle unauthorized securely by clearing NextAuth session
+      const { signOut } = await import('next-auth/react');
+      signOut({ callbackUrl: '/login' });
     }
     return Promise.reject(error);
   }
 );
 
 export default apiClient;
+

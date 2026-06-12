@@ -2,9 +2,18 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { CorrelationLogger } from './common/logger/correlation.logger';
+import helmet from 'helmet';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+  });
+  
+  // 1. Global Logger Binding
+  const correlationLogger = new CorrelationLogger();
+  app.useLogger(correlationLogger);
+  
   const logger = new Logger('Bootstrap');
 
   // Global API prefix
@@ -13,10 +22,16 @@ async function bootstrap() {
   // Graceful shutdown hooks
   app.enableShutdownHooks();
 
-  // CORS
+  // Helmet Security
+  app.use(helmet());
+
+  // Strict CORS Lockdown
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   app.enableCors({
-    origin: true,
+    origin: frontendUrl.split(','),
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   // Global Validation Pipe

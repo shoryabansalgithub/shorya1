@@ -36,6 +36,13 @@ export class UsersService {
     return user ? UserMapper.toSafeUserDto(user) : null;
   }
 
+  async findByIdWithSecurity(id: string): Promise<UserWithPasswordRecord | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+      select: userWithPasswordSelect,
+    });
+  }
+
   async create(data: CreateUserDto): Promise<SafeUserDto> {
     const salt = await bcrypt.genSalt();
     const hashedPassword = await bcrypt.hash(data.password, salt);
@@ -45,9 +52,7 @@ export class UsersService {
         data: {
           email: data.email,
           name: data.name,
-          phone: data.phone,
-          role: data.role ?? Role.CASHIER,
-          shopId: data.shopId,
+          role: Role.CASHIER,
           password: hashedPassword,
         },
         select: safeUserSelect,
@@ -65,5 +70,35 @@ export class UsersService {
       this.logger.error('Failed to create user', error);
       throw error;
     }
+  }
+
+  async incrementFailedAttempts(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { failedAttempts: true },
+    });
+    
+    if (!user) return;
+    const newAttempts = user.failedAttempts + 1;
+    
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        failedAttempts: newAttempts,
+        isLocked: newAttempts >= 5,
+        lockedUntil: newAttempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null,
+      },
+    });
+  }
+
+  async resetFailedAttempts(userId: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        failedAttempts: 0,
+        isLocked: false,
+        lockedUntil: null,
+      },
+    });
   }
 }

@@ -1,97 +1,126 @@
-import { Injectable, Logger } from '@nestjs/common';
-// import { PrismaService } from '../prisma/prisma.service'; // We will create this next
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
 import Fuse from 'fuse.js';
 
 @Injectable()
 export class OcrService {
   private readonly logger = new Logger(OcrService.name);
 
-  // constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
-  async processDocument(fileBuffer: Buffer, documentType: string) {
-    this.logger.log(`Starting OCR processing for document type: ${documentType}`);
+  async processDocument(fileBuffer: Buffer, documentType: string, shopId: string) {
+    this.logger.log(`Starting real OCR processing via Gemini for document type: ${documentType}`);
     
-    // Step 1: Upload to Cloudinary (Mocked for now)
-    const imageUrl = await this.uploadToCloudinary(fileBuffer);
+    // Step 1: Base64 encode for Gemini
+    const base64Image = fileBuffer.toString('base64');
     
-    // Step 2: Call Python FastAPI Microservice for OpenCV cleanup & Tesseract OCR
-    const rawOcrText = await this.callPythonOcrService(imageUrl);
+    // Step 2: Extract structured JSON using Gemini 1.5
+    const parsedData = await this.parseWithGemini(base64Image);
     
-    // Step 3: Send messy OCR text to Gemini Vision API for structured parsing
-    const parsedData = await this.parseWithGemini(rawOcrText);
+    // Step 3: Match items to real shop inventory using Fuzzy Search
+    const matchedItems = await this.fuzzyMatchProducts(parsedData.items, shopId);
     
-    // Step 4: Smart Matching with Inventory (Fuzzy Search)
-    const matchedItems = await this.fuzzyMatchProducts(parsedData.items);
-    
-    // Step 5: Save everything to Prisma Database
-    /*
-    const document = await this.prisma.document.create({
-      data: {
-        type: documentType as any,
-        imageUrl,
-        rawOcrText,
-        extractedJson: parsedData,
-        status: 'COMPLETED',
-        extractedItems: {
-          create: matchedItems.map(item => ({
-            rawText: item.rawName,
-            matchedProductId: item.matchedSku || null,
-            quantity: item.qty,
-            unitPrice: item.price,
-            totalPrice: item.qty * item.price,
-            confidence: item.confidence,
-          }))
-        }
-      }
-    });
-    */
-
-    // Return the response back to the frontend dashboard
     return {
       success: true,
-      message: 'Document successfully parsed and matched',
-      // documentId: document.id,
+      message: 'Document successfully parsed and matched via AI',
       preview: {
-        imageUrl,
-        rawOcrText,
         parsedData,
         matchedItems
       }
     };
   }
 
-  private async uploadToCloudinary(_buffer: Buffer): Promise<string> {
-    this.logger.log('Uploading image to Cloudinary...');
-    // Implementation goes here
-    return 'https://res.cloudinary.com/demo/image/upload/sample.jpg';
-  }
+  private async parseWithGemini(base64Image: string): Promise<any> {
+    this.logger.log('Sending image to Gemini API for direct OCR to JSON...');
+    const apiKey = this.config.get<string>('GEMINI_API_KEY');
+    if (!apiKey) {
+      throw new BadRequestException('OCR service requires GEMINI_API_KEY environment variable');
+    }
 
-  private async callPythonOcrService(_imageUrl: string): Promise<string> {
-    this.logger.log('Calling Python FastAPI for OpenCV & Tesseract...');
-    // const response = await fetch('http://python-ocr-service/scan', { method: 'POST', body: JSON.stringify({ imageUrl }) });
-    return "mggi n00dles 140 QTY 2 28.00\natta ashrivad 5k QTY 1 210.00";
-  }
+    const prompt = `Analyze this handwritten or printed bill/invoice.
+Extract all line items. Return ONLY a valid JSON array of objects, with no markdown formatting.
+Each object must have exactly these keys:
+- rawName: string (the name of the item)
+- qty: number (quantity, default 1)
+- price: number (price per unit)
+Example: [{"rawName": "Maggi Noodles", "qty": 2, "price": 14.50}]`;
 
-  private async parseWithGemini(_rawText: string): Promise<any> {
-    this.logger.log('Sending raw OCR text to Gemini API for JSON parsing...');
-    // Example: prompt Gemini to return clean JSON array of { rawName, qty, price }
-    return {
-      items: [
-        { rawName: 'mggi n00dles 140', qty: 2, price: 14.00 },
-        { rawName: 'atta ashrivad 5k', qty: 1, price: 210.00 },
-      ]
+    const payload = {
+      contents: [{
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType: 'image/jpeg', data: base64Image } }
+        ]
+      }]
     };
+
+    // ━━━ P1 FIX: Exponential backoff retry for transient Gemini failures ━━━
+    const MAX_RETRIES = 3;
+    const RETRYABLE_STATUSES = [429, 500, 502, 503, 504];
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000); // 30s hard timeout
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const errBody = await response.text();
+          if (RETRYABLE_STATUSES.includes(response.status) && attempt < MAX_RETRIES) {
+            const backoffMs = Math.pow(2, attempt) * 1000; // 2s, 4s
+            this.logger.warn(`Gemini returned ${response.status}, retrying in ${backoffMs}ms (attempt ${attempt}/${MAX_RETRIES})`);
+            await new Promise(r => setTimeout(r, backoffMs));
+            continue;
+          }
+          this.logger.error(`Gemini API Error (attempt ${attempt}/${MAX_RETRIES}):`, errBody);
+          throw new BadRequestException('Failed to process document with AI model after retries');
+        }
+
+        const data = await response.json();
+        let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+        try {
+          const items = JSON.parse(text);
+          return { items: Array.isArray(items) ? items : [] };
+        } catch (e) {
+          this.logger.error('Failed to parse Gemini output as JSON:', text);
+          return { items: [] };
+        }
+      } catch (fetchErr: any) {
+        if (fetchErr?.name === 'AbortError' && attempt < MAX_RETRIES) {
+          const backoffMs = Math.pow(2, attempt) * 1000;
+          this.logger.warn(`Gemini request timed out, retrying in ${backoffMs}ms (attempt ${attempt}/${MAX_RETRIES})`);
+          await new Promise(r => setTimeout(r, backoffMs));
+          continue;
+        }
+        if (fetchErr instanceof BadRequestException) throw fetchErr;
+        this.logger.error(`Gemini fetch error (attempt ${attempt}/${MAX_RETRIES}):`, fetchErr);
+        throw new BadRequestException('Failed to connect to AI model after retries');
+      }
+    }
+
+    throw new BadRequestException('Gemini OCR exhausted all retry attempts');
   }
 
-  private async fuzzyMatchProducts(extractedItems: any[]): Promise<any[]> {
-    this.logger.log('Running Fuse.js fuzzy matching against inventory...');
+  private async fuzzyMatchProducts(extractedItems: any[], shopId: string): Promise<any[]> {
+    this.logger.log('Running Fuse.js fuzzy matching against real inventory...');
     
-    // Mock Inventory Database
-    const inventory = [
-      { id: '890125', name: 'Maggi Noodles 140g', price: 14 },
-      { id: '890123', name: 'Aashirvaad Atta 5kg', price: 210 },
-      { id: '890128', name: 'Parle G Biscuit', price: 10 },
-    ];
+    const inventory = await this.prisma.product.findMany({
+      where: { shopId, isDeleted: false, isActive: true },
+      select: { id: true, name: true, sellingPrice: true }
+    });
 
     const fuse = new Fuse(inventory, { keys: ['name'], threshold: 0.4 });
 
@@ -103,6 +132,7 @@ export class OcrService {
           ...item,
           matchedSku: match.id,
           matchedName: match.name,
+          dbPrice: Number(match.sellingPrice),
           confidence: 0.95
         };
       }
@@ -110,6 +140,7 @@ export class OcrService {
         ...item,
         matchedSku: null,
         matchedName: null,
+        dbPrice: null,
         confidence: 0.2
       };
     });

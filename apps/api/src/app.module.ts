@@ -2,8 +2,9 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { StorageModule } from './storage/storage.module';
+import { BullModule } from '@nestjs/bullmq';
 
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import * as Joi from 'joi';
 import { AuthModule } from './auth/auth.module';
@@ -12,6 +13,13 @@ import { BillingModule } from './billing/billing.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { CustomersModule } from './customers/customers.module';
+import { OcrModule } from './ocr/ocr.module';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { CronLockModule } from './common/cron-lock/cron-lock.module';
+import { OutboxModule } from './common/outbox/outbox.module';
+import { CorrelationModule } from './common/correlation/correlation.module';
 
 @Module({
   imports: [
@@ -34,11 +42,32 @@ import { CustomersModule } from './customers/customers.module';
         S3_BUCKET: Joi.string().optional(),
         S3_PUBLIC_URL: Joi.string().optional(),
         REDIS_URL: Joi.string().optional(),
+        GEMINI_API_KEY: Joi.string().optional(),
       }),
     }),
     CacheModule.register({
       isGlobal: true,
     }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          url: configService.get<string>('REDIS_URL'),
+        },
+        defaultJobOptions: {
+          removeOnComplete: true,
+          removeOnFail: false,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
+        },
+      }),
+    }),
+    ThrottlerModule.forRoot([
+      { name: 'short', ttl: 1000, limit: 3 },
+      { name: 'medium', ttl: 10000, limit: 20 },
+      { name: 'long', ttl: 60000, limit: 100 },
+    ]),
     PrismaModule,
     StorageModule,
     UsersModule,
@@ -46,8 +75,16 @@ import { CustomersModule } from './customers/customers.module';
     BillingModule,
     InventoryModule,
     CustomersModule,
+    OcrModule,
+    CronLockModule,
+    OutboxModule,
+    CorrelationModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+  ],
 })
 export class AppModule {}
