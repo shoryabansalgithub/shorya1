@@ -1,6 +1,6 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { v4 as uuidv4, validate as uuidValidate } from 'uuid';
+import { v4 as uuidv4 } from 'uuid';
 import { CorrelationContextService } from '../correlation/correlation-context.service';
 
 @Injectable()

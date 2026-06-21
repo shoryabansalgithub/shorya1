@@ -91,7 +91,7 @@ export class BillingService {
       // Redis connection failure: rollback what we can, continue to DB-only path
       this.logger.warn('Redis pre-check failed, falling back to DB-only path', e);
       for (const doneItem of decrementedInRedis) {
-        try { await this.inventoryCache.restoreStock(user.shopId, doneItem.productId, doneItem.quantity); } catch (_) {}
+        try { await this.inventoryCache.restoreStock(user.shopId, doneItem.productId, doneItem.quantity); } catch { /* best-effort rollback */ }
       }
       decrementedInRedis.length = 0; // Nothing to compensate later
     }
@@ -522,14 +522,36 @@ export class BillingService {
             if (existingLedgers > 0) {
               this.logger.warn(`Ledger entries already exist for Invoice ${invoice.id}. Skipping double-entry creation to preserve immutability.`);
             } else {
+              // Determine the debit account based on payment mode
+              const debitAccount = dto.paymentMode === 'UDHAR' || (dto.udharAmount && dto.udharAmount > 0)
+                ? 'ACCOUNTS_RECEIVABLE' as const
+                : 'CASH' as const;
+
+              // Compute running balance for debit account
+              const lastDebitEntry = await tx.ledgerTransaction.findFirst({
+                where: { shopId: user.shopId, account: debitAccount },
+                orderBy: { createdAt: 'desc' }
+              });
+              const debitBalanceBefore = lastDebitEntry ? lastDebitEntry.balanceAfter.toNumber() : 0;
+              const debitBalanceAfter = debitBalanceBefore + finalTotal.toNumber();
+
+              // Compute running balance for credit account (SALES_REVENUE)
+              const lastCreditEntry = await tx.ledgerTransaction.findFirst({
+                where: { shopId: user.shopId, account: 'SALES_REVENUE' },
+                orderBy: { createdAt: 'desc' }
+              });
+              const creditBalanceBefore = lastCreditEntry ? lastCreditEntry.balanceAfter.toNumber() : 0;
+              const creditBalanceAfter = creditBalanceBefore + finalTotal.toNumber();
+
               await tx.ledgerTransaction.create({
                 data: {
                   shopId: user.shopId,
                   invoiceId: invoice.id,
+                  account: debitAccount,
                   type: 'DEBIT',
                   amount: finalTotal,
-                  balanceAfter: 0, // Simplified
-                  description: `CASH/RECEIVABLE - Bill ${invoiceNumber}`
+                  balanceAfter: debitBalanceAfter,
+                  description: `Bill ${invoiceNumber} - ${debitAccount}`
                 }
               });
 
@@ -537,10 +559,11 @@ export class BillingService {
                 data: {
                   shopId: user.shopId,
                   invoiceId: invoice.id,
+                  account: 'SALES_REVENUE',
                   type: 'CREDIT',
                   amount: finalTotal,
-                  balanceAfter: 0, // Simplified
-                  description: `SALES_REVENUE - Bill ${invoiceNumber}`
+                  balanceAfter: creditBalanceAfter,
+                  description: `Bill ${invoiceNumber} - SALES_REVENUE`
                 }
               });
             }
@@ -583,7 +606,7 @@ export class BillingService {
               // Redis was already decremented by the winning thread's commit;
               // our pre-check decrement is a surplus — restore it
               for (const doneItem of decrementedInRedis) {
-                try { await this.inventoryCache.restoreStock(user.shopId, doneItem.productId, doneItem.quantity); } catch (_) {}
+                try { await this.inventoryCache.restoreStock(user.shopId, doneItem.productId, doneItem.quantity); } catch { /* best-effort rollback */ }
               }
               return duplicate;
             }

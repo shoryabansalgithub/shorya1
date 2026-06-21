@@ -94,7 +94,7 @@ Example: [{"rawName": "Maggi Noodles", "qty": 2, "price": 14.50}]`;
         try {
           const items = JSON.parse(text);
           return { items: Array.isArray(items) ? items : [] };
-        } catch (e) {
+        } catch {
           this.logger.error('Failed to parse Gemini output as JSON:', text);
           return { items: [] };
         }

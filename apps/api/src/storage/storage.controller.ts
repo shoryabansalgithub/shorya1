@@ -78,7 +78,7 @@ function parseJsonObject(rawJson: string | undefined): Record<string, unknown> {
       return {};
     }
     return parsed as Record<string, unknown>;
-  } catch (error) {
+  } catch {
     throw new BadRequestException('Invalid JSON payload');
   }
 }

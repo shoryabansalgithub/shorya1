@@ -6,6 +6,8 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 @WebSocketGateway({
   cors: { origin: process.env.FRONTEND_URL },
@@ -19,19 +21,57 @@ export class InventoryGateway
 
   @WebSocketServer() server: Server;
 
-  handleConnection(client: Socket) {
-    const shopId = client.handshake.query.shopId as string;
-    if (shopId) {
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  async handleConnection(client: Socket) {
+    try {
+      // Extract JWT from handshake auth or authorization header
+      const token =
+        client.handshake.auth?.token ||
+        client.handshake.headers?.authorization?.replace('Bearer ', '');
+
+      if (!token) {
+        this.logger.warn(`Client ${client.id} connected without auth token — disconnecting`);
+        client.disconnect(true);
+        return;
+      }
+
+      // Verify JWT
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.get<string>('JWT_SECRET'),
+      });
+
+      if (!payload || !payload.sub) {
+        this.logger.warn(`Client ${client.id} has invalid JWT — disconnecting`);
+        client.disconnect(true);
+        return;
+      }
+
+      const shopId = client.handshake.query.shopId as string;
+      if (!shopId) {
+        this.logger.warn(`Client ${client.id} connected without shopId — disconnecting`);
+        client.disconnect(true);
+        return;
+      }
+
+      // Verify user belongs to requested shop
+      if (payload.shopId && payload.shopId !== shopId) {
+        this.logger.warn(`Client ${client.id} shopId mismatch (token: ${payload.shopId}, requested: ${shopId}) — disconnecting`);
+        client.disconnect(true);
+        return;
+      }
+
       client.join(`shop:${shopId}`);
-      this.logger.debug(`Client ${client.id} joined shop:${shopId}`);
-    } else {
-      // Reject connections without a shopId — they can't receive meaningful events
-      this.logger.warn(`Client ${client.id} connected without shopId — disconnecting`);
+      (client as any).userId = payload.sub;
+      (client as any).shopId = shopId;
+      this.logger.debug(`Client ${client.id} (user: ${payload.sub}) joined shop:${shopId}`);
+    } catch (error: any) {
+      this.logger.warn(`Client ${client.id} JWT verification failed — disconnecting: ${error?.message || error}`);
       client.disconnect(true);
     }
-    // TODO: Add JWT verification for WebSocket connections.
-    // Extract the token from client.handshake.auth.token or client.handshake.headers.authorization,
-    // verify with JwtService, and validate that the user belongs to the requested shopId.
   }
 
   handleDisconnect(client: Socket) {

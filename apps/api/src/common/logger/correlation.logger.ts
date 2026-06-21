@@ -21,14 +21,25 @@ export class CorrelationLogger extends ConsoleLogger {
   }
 
   private redact(obj: any): any {
+    if (Array.isArray(obj)) {
+      return obj.map(item => {
+        if (typeof item === 'object' && item !== null) {
+          return this.redact(item);
+        }
+        return item;
+      });
+    }
+
     // Prevent mutating the original object
     const copy = { ...obj };
-    const sensitiveKeys = ['password', 'token', 'cookie', 'secret', 'payment'];
+    const sensitiveKeys = ['password', 'token', 'cookie', 'secret', 'payment', 'authorization', 'creditcard'];
     
     for (const key of Object.keys(copy)) {
       if (sensitiveKeys.some(sk => key.toLowerCase().includes(sk))) {
         copy[key] = '[REDACTED]';
-      } else if (typeof copy[key] === 'object' && copy[key] !== null && !Array.isArray(copy[key])) {
+      } else if (Array.isArray(copy[key])) {
+        copy[key] = this.redact(copy[key]);
+      } else if (typeof copy[key] === 'object' && copy[key] !== null) {
         copy[key] = this.redact(copy[key]);
       }
     }

@@ -73,7 +73,7 @@ export class CronLockService implements OnModuleInit, OnModuleDestroy {
           this.logger.error(`Failed to release lock ${resource}: ${e.message}`);
         });
       }
-    } catch (err: any) {
+    } catch {
       // ExecutionExecutionError means lock couldn't be acquired (another pod has it). This is expected.
       this.logger.debug(`Lock ${resource} is held by another pod. Skipping execution.`);
       return null;

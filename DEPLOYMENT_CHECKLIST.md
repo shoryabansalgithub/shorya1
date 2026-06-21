@@ -1,32 +1,44 @@
-# Production Deployment Checklist (v1.0.0-rc1)
+# Production Deployment Checklist (v1.0.0-rc2)
 
-This checklist enforces the exact execution order required to deploy the Sprint 1 Frozen Architecture to a live production cluster safely.
+This checklist enforces the exact execution order required to deploy Epic 1 safely.
 
 ## Phase 1: Environment & Secrets
-- [ ] Verify `DATABASE_URL` targets a live MySQL 8.x+ instance.
-- [ ] Verify `REDIS_URL` points to an enterprise Redis cluster.
-- [ ] Verify `FRONTEND_URL` exactly matches the production CORS origin constraints.
-- [ ] Ensure all `JWT_*` signing secrets have been securely rotated.
+- [ ] Verify `DATABASE_URL` targets a live MySQL 8.x+ instance with `CREATE TRIGGER` privileges.
+- [ ] Verify `REDIS_URL` points to a Redis 6.2+ instance.
+- [ ] Verify `FRONTEND_URL` exactly matches production CORS origin(s), comma-separated.
+- [ ] Verify all `JWT_SECRET`, `JWT_EXPIRES_IN`, `JWT_REFRESH_SECRET`, `JWT_REFRESH_EXPIRES_IN` are securely set.
+- [ ] Verify `NODE_ENV=production` to disable Swagger and SQL query logging.
 
 ## Phase 2: Database Orchestration
 - [ ] Halt all cron workers and BullMQ consumers in the existing environment.
-- [ ] Execute `npx prisma migrate deploy` locally or via CI/CD.
-  - *Must explicitly output:* `Applying migration 20260612000000_add_ledger_fk_and_triggers`
-  - *Must explicitly output:* `Applying migration 20260612160645_add_drift_log`
-- [ ] (Optional) If booting an entirely blank cluster, do **not** run raw SQL injection. `migrate deploy` inherently binds the triggers.
+- [ ] Execute `npx prisma migrate deploy` from CI/CD or locally.
+  - Must create tables: `LedgerTransaction`, `OutboxEvent`, `InventoryDriftLog`
+  - Must create triggers: `prevent_ledger_update`, `prevent_ledger_delete`
+  - Must add columns: `stockVersion` on Product, `idempotencyKey` on Invoice
+  - Must add foreign key constraints for all relations
+- [ ] **No manual SQL required.** All infrastructure is created via Prisma migrations.
 
 ## Phase 3: Cluster Boot Sequence
-- [ ] Execute `npm run build` cleanly.
+- [ ] Execute `npm run build` — must complete with 0 errors.
 - [ ] Boot the primary API HTTP nodes.
-- [ ] Execute a simple `/health` or dummy `/api/inventory/products` GET request.
-  - *Verification:* The container `stdout` logger must securely attach `correlationId: '...'` to the request trace.
-- [ ] Start the background Worker Nodes (`BullMQ` processes).
-  - *Verification:* `CronLockService` should log a successful Redis connection (and explicitly NOT throw the local execution fallback warning).
-  - *Verification:* `OutboxRelayService` should begin polling MySQL immediately.
+- [ ] Verify `/api/health` or a GET request succeeds.
+  - Verify `correlationId` appears in stdout logs.
+- [ ] Start BullMQ worker processes.
+  - `CronLockService` should log a successful Redis connection.
+  - `OutboxRelayService` should begin polling MySQL every 5 seconds.
 
-## Phase 4: Production Observability Validation
-- [ ] Check production logging aggregator (e.g., Datadog, ELK, CloudWatch).
-- [ ] Filter logs by `event: REDIS_STOCK_DRIFT` to ensure the Reconciliation Cron is actively healing.
-- [ ] Fire a test POST request with dummy data. Observe `stdout` to ensure PII (`password`, `token`) is securely displaying as `[REDACTED]`.
+## Phase 4: Smoke Test
+- [ ] Authenticate and obtain a JWT token.
+- [ ] Send a POST to `/api/billing/invoice` with valid data.
+  - Verify the response contains an invoice with items.
+  - Verify `LedgerTransaction` table has exactly 2 entries (DEBIT + CREDIT) for this invoice.
+  - Verify `OutboxEvent` was created with status `PENDING`, then processed to `DONE`.
+- [ ] Fire a test POST with a `VIEWER` role token.
+  - Verify HTTP 403 Forbidden is returned.
+
+## Phase 5: Observability Validation
+- [ ] Filter logs for `correlationId` to confirm tracing works.
+- [ ] Fire a POST with PII data in body (e.g., `{"password": "test"}`).
+  - Verify stdout shows `[REDACTED]` instead of the actual value.
 
 **APPROVAL: Go-Live requires verification of all steps above.**

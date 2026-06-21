@@ -28,7 +28,6 @@ export class SystemEventsProcessor extends WorkerHost {
         try {
       await this.prisma.$transaction(async (tx) => {
         // 1. Database-Level Idempotency Check
-        // We use the existing AuditLog to track processed events to guarantee zero duplicate financial side-effects.
         const alreadyProcessed = await tx.auditLog.findFirst({
           where: {
             entity: 'OutboxEvent',
@@ -57,11 +56,10 @@ export class SystemEventsProcessor extends WorkerHost {
         }
 
         // 3. Commit Idempotency Record
-        // (Using a system placeholder for userId since it's a background process)
         await tx.auditLog.create({
           data: {
-            shopId: job.data?.shopId || 'SYSTEM',
-            userId: 'SYSTEM_WORKER',
+            shopId: job.data?.shopId || null,
+            userId: job.data?.userId || 'SYSTEM',
             action: 'SYSTEM_EVENT_PROCESSED',
             entity: 'OutboxEvent',
             entityId: eventId,
@@ -75,11 +73,9 @@ export class SystemEventsProcessor extends WorkerHost {
     } catch (error: any) {
       this.logger.error(`Failed to process job ${job.id}: ${error.message}`);
       
-      // Retry Classification
       if (this.isTransientError(error)) {
-        reject(error); // Standard throw triggers BullMQ exponential backoff retry
+        reject(error);
       } else {
-        // Wrap permanent/fatal errors in UnrecoverableError to move to failed state/DLQ instantly
         reject(new UnrecoverableError(`Permanent failure: ${error.message}`));
       }
     }
@@ -88,46 +84,28 @@ export class SystemEventsProcessor extends WorkerHost {
   }
 
   private isTransientError(error: any): boolean {
-    // Recognize DB deadlocks, timeouts, or explicit transient markers
     const msg = error.message?.toLowerCase() || '';
     if (msg.includes('deadlock') || msg.includes('timeout') || msg.includes('connection')) {
       return true;
     }
-    // Prisma specific connection errors
     if (error.code && ['P1001', 'P1002', 'P1008', 'P1011'].includes(error.code)) {
       return true;
     }
-    // Application logic errors (like invalid payload) are permanent
     return false;
   }
 
   // Domain handlers using transaction client
   private async handleInvoiceCreated(tx: Prisma.TransactionClient, data: any) {
-    if (!data.invoiceId || !data.shopId || !data.amount) {
+    if (!data.invoiceId || !data.shopId) {
       throw new UnrecoverableError('Invalid payload for INVOICE_CREATED');
     }
 
-    // Secondary Domain Idempotency
-    const existingLedger = await tx.ledgerTransaction.findFirst({
-      where: { invoiceId: data.invoiceId }
-    });
+    // Ledger entries are already created atomically inside the BillingService transaction.
+    // This worker handles secondary side-effects only (notifications, analytics, etc).
+    // Do NOT create duplicate ledger entries here.
+    this.logger.log(`Invoice ${data.invoiceId} event acknowledged. Ledger entries were created atomically in the billing transaction.`);
     
-    if (existingLedger) {
-      this.logger.warn(`Ledger record already exists for invoice ${data.invoiceId}`);
-      return; // Already recorded
-    }
-
-    // Enforce exactly-once Ledger write
-    await tx.ledgerTransaction.create({
-      data: {
-        shopId: data.shopId,
-        invoiceId: data.invoiceId,
-        type: data.type || 'CREDIT',
-        amount: data.amount,
-        balanceAfter: data.balanceAfter || 0,
-        description: data.description || 'Invoice creation'
-      }
-    });
+    // Future: Send notifications, update analytics, trigger reports, etc.
   }
 
   private async handleBillScanned(tx: Prisma.TransactionClient, data: any) {
@@ -135,12 +113,6 @@ export class SystemEventsProcessor extends WorkerHost {
       throw new UnrecoverableError('Invalid payload for BILL_SCANNED');
     }
 
-    // Example OCR logic placeholder. Wait, we are not fully implementing OCR here,
-    // just the consumer safely handling the payload and dispatching to a hypothetical OCR service.
-    // The strict requirement is safety, idempotency, and retry behavior.
     this.logger.log(`Dispatching OCR job for bill ${data.billId} with url ${data.fileUrl}`);
-    
-    // Simulate some logic
-    // await this.ocrService.process(data.fileUrl);
   }
 }

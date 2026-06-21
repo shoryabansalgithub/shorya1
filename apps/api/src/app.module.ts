@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { StorageModule } from './storage/storage.module';
 import { BullModule } from '@nestjs/bullmq';
+import { redisStore } from 'cache-manager-redis-yet';
 
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
@@ -45,8 +46,21 @@ import { CorrelationModule } from './common/correlation/correlation.module';
         GEMINI_API_KEY: Joi.string().optional(),
       }),
     }),
-    CacheModule.register({
+    CacheModule.registerAsync({
       isGlobal: true,
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => {
+        const redisUrl = configService.get<string>('REDIS_URL');
+        if (redisUrl) {
+          return {
+            store: redisStore as any,
+            url: redisUrl,
+            ttl: 3600 * 1000,
+          } as any;
+        }
+        return { ttl: 3600 * 1000 } as any;
+      },
     }),
     BullModule.forRootAsync({
       imports: [ConfigModule],

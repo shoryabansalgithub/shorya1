@@ -1,7 +1,6 @@
 import { Body, Controller, Get, Post, Request, UseGuards } from '@nestjs/common';
 import { LocalAuthGuard } from './local-auth.guard';
 import { AuthService, LoginResponseDto } from './auth.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
 import { Public } from './public.decorator';
 import { Throttle } from '@nestjs/throttler';
 import {
