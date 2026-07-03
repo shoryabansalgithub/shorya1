@@ -26,7 +26,10 @@ import { OutboxModule } from './common/outbox/outbox.module';
 import { CorrelationModule } from './common/correlation/correlation.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { ShopsModule } from './shops/shops.module';
-
+import { ProductsModule } from './products/products.module';
+import { CategoriesModule } from './categories/categories.module';
+import { ProductVersioningModule } from './product-versioning/product-versioning.module';
+import { ProductVariantsModule } from './product-variants/product-variants.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -101,6 +104,10 @@ import { ShopsModule } from './shops/shops.module';
     IamModule,
     InvitationsModule,
     ShopsModule,
+    ProductsModule,
+    CategoriesModule,
+    ProductVersioningModule,
+    ProductVariantsModule,
   ],
   controllers: [AppController],
   providers: [

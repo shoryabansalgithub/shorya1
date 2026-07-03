@@ -93,6 +93,47 @@ enum ProductUnit {
   BUNDLE
 }
 
+enum ProductStatus {
+  DRAFT
+  PENDING_APPROVAL
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+  SOFT_DELETED
+}
+
+enum ProductType {
+  SIMPLE
+  VARIABLE
+  BUNDLE
+  COMBO
+  SERVICE
+  DIGITAL
+  SERIALIZED
+  BATCH_MANAGED
+  PERISHABLE
+  RAW_MATERIAL
+  SEMI_FINISHED
+  FINISHED_GOODS
+  SUBSCRIPTION
+}
+
+enum RevisionStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  PUBLISHED
+  SUPERSEDED
+  ARCHIVED
+  REJECTED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum GstRate {
   ZERO
   FIVE
@@ -150,24 +191,34 @@ model Shop {
   owner    User          @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   settings ShopSettings?
 
-  users              User[]
-  categories         Category[]
-  products           Product[]
-  productBatches     ProductBatch[]
-  suppliers          Supplier[]
-  customers          Customer[]
-  shifts             Shift[]
-  invoices           Invoice[]
-  udharTransactions  UdharTransaction[]
-  inventoryLogs      InventoryLog[]
-  auditLogs          AuditLog[]
-  purchaseOrders     PurchaseOrder[]
-  stockTransfersIn   StockTransfer[]     @relation("TransferDestinationShop")
-  stockTransfersOut  StockTransfer[]     @relation("TransferSourceShop")
-  notifications      Notification[]
-  ledgerTransactions LedgerTransaction[]
-  inventoryDriftLogs InventoryDriftLog[]
-  invitations        Invitation[]
+  users                User[]
+  categories           Category[]
+  products             Product[]
+  productBatches       ProductBatch[]
+  suppliers            Supplier[]
+  customers            Customer[]
+  shifts               Shift[]
+  invoices             Invoice[]
+  udharTransactions    UdharTransaction[]
+  inventoryLogs        InventoryLog[]
+  auditLogs            AuditLog[]
+  purchaseOrders       PurchaseOrder[]
+  stockTransfersIn     StockTransfer[]       @relation("TransferDestinationShop")
+  stockTransfersOut    StockTransfer[]       @relation("TransferSourceShop")
+  notifications        Notification[]
+  ledgerTransactions   LedgerTransaction[]
+  inventoryDriftLogs   InventoryDriftLog[]
+  invitations          Invitation[]
+  brands               Brand[]
+  manufacturers        Manufacturer[]
+  variantAttributes    VariantAttribute[]
+  productVariants      ProductVariant[]
+  productBarcodes      ProductBarcode[]
+  productAttributes    ProductAttribute[]
+  productTags          ProductTag[]
+  productImages        ProductImage[]
+  productPriceTiers    ProductPriceTier[]
+  productRelationships ProductRelationship[]
 }
 
 model User {
@@ -252,57 +303,99 @@ model LoginAttempt {
 }
 
 model Category {
-  id        String    @id @default(cuid())
-  name      String
-  shopId    String
-  parentId  String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  id           String    @id @default(cuid())
+  name         String
+  slug         String    @default("")
+  shopId       String
+  parentId     String?
+  path         String    @default("/")
+  depth        Int       @default(0)
+  sortOrder    Int       @default(0)
+  isActive     Boolean   @default(true)
+  imageUrl     String?
+  productCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  isDeleted    Boolean   @default(false)
+  deletedAt    DateTime?
 
   shop          Shop       @relation(fields: [shopId], references: [id], onDelete: Restrict)
   parent        Category?  @relation("SubCategories", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   subCategories Category[] @relation("SubCategories")
   products      Product[]
 
+  @@unique([shopId, name, deletedAt])
   @@index([shopId])
   @@index([parentId])
+  @@index([shopId, path])
+  @@index([shopId, isActive])
 }
 
 model Product {
-  id             String      @id @default(cuid())
-  name           String
-  sku            String
-  barcode        String?
-  description    String?
-  costPrice      Decimal     @db.Decimal(10, 2)
-  sellingPrice   Decimal     @db.Decimal(10, 2)
-  mrp            Decimal     @db.Decimal(10, 2)
-  wholesalePrice Decimal     @db.Decimal(10, 2)
-  gstRate        GstRate     @default(EIGHTEEN)
-  cessRate       Decimal     @default(0) @db.Decimal(5, 2)
-  hsnCode        String?
+  id          String        @id @default(cuid())
+  name        String
+  slug        String        @default("")
+  sku         String
+  barcode     String?
+  description String?       @db.Text
+  type        ProductType   @default(SIMPLE)
+  status      ProductStatus @default(ACTIVE)
+
+  costPrice       Decimal  @db.Decimal(10, 2)
+  sellingPrice    Decimal  @db.Decimal(10, 2)
+  mrp             Decimal  @db.Decimal(10, 2)
+  wholesalePrice  Decimal  @db.Decimal(10, 2)
+  minSellingPrice Decimal? @db.Decimal(10, 2)
+  maxDiscountPct  Decimal? @db.Decimal(5, 2)
+
+  gstRate  GstRate @default(EIGHTEEN)
+  cessRate Decimal @default(0) @db.Decimal(5, 2)
+  hsnCode  String?
+
+  currentPublishedRevId String? @unique
+  currentDraftRevId     String? @unique
+
   categoryId     String?
   shopId         String
   supplierId     String?
-  currentStock   Decimal     @default(0) @db.Decimal(10, 3)
-  stockVersion   Int         @default(0)
-  reorderPoint   Decimal     @default(10) @db.Decimal(10, 3)
-  reorderQty     Decimal     @default(50) @db.Decimal(10, 3)
-  unit           ProductUnit
-  hasExpiry      Boolean     @default(false)
-  isActive       Boolean     @default(true)
-  imageUrl       String?
-  aliases        String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  isDeleted      Boolean     @default(false)
-  deletedAt      DateTime?
+  brandId        String?
+  manufacturerId String?
 
-  shop               Shop                @relation(fields: [shopId], references: [id], onDelete: Restrict)
-  category           Category?           @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  supplier           Supplier?           @relation(fields: [supplierId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  currentStock Decimal @default(0) @db.Decimal(10, 3)
+  stockVersion Int     @default(0)
+  reorderPoint Decimal @default(10) @db.Decimal(10, 3)
+  reorderQty   Decimal @default(50) @db.Decimal(10, 3)
+
+  totalUnitsSold Decimal   @default(0) @db.Decimal(10, 3)
+  totalRevenue   Decimal   @default(0) @db.Decimal(12, 2)
+  lastSoldAt     DateTime?
+  analyticsClass String?
+
+  unit             ProductUnit
+  hasExpiry        Boolean     @default(false)
+  defaultShelfLife Int?
+  isActive         Boolean     @default(true)
+  imageUrl         String?
+  aliases          String?     @db.Text
+  searchKeywords   String?     @db.Text
+
+  version    Int       @default(1)
+  createdBy  String?
+  updatedBy  String?
+  approvedBy String?
+  approvedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  shop         Shop          @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  category     Category?     @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  supplier     Supplier?     @relation(fields: [supplierId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  brand        Brand?        @relation(fields: [brandId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  manufacturer Manufacturer? @relation(fields: [manufacturerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
   batches            ProductBatch[]
   invoiceItems       InvoiceItem[]
   inventoryLogs      InventoryLog[]
@@ -310,11 +403,24 @@ model Product {
   stockTransferItems StockTransferItem[]
   inventoryDriftLogs InventoryDriftLog[]
 
+  revisions       ProductRevision[]
+  branches        RevisionBranch[]
+  variants        ProductVariant[]
+  barcodes        ProductBarcode[]
+  images          ProductImage[]
+  attributes      ProductAttribute[]
+  tags            ProductTag[]
+  priceTiers      ProductPriceTier[]
+  relationsSource ProductRelationship[] @relation("RelationSource")
+  relationsTarget ProductRelationship[] @relation("RelationTarget")
+  skuHistory      SkuHistory[]
+
   @@unique([shopId, sku, deletedAt])
-  @@index([shopId])
-  @@index([categoryId])
-  @@index([supplierId])
-  @@fulltext([name, aliases])
+  @@index([shopId, status])
+  @@index([shopId, categoryId])
+  @@index([shopId, brandId])
+  @@index([shopId, type])
+  @@fulltext([name, aliases, searchKeywords])
 }
 
 model ProductBatch {
@@ -728,6 +834,307 @@ model InventoryDriftLog {
   product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@index([shopId, createdAt])
+  @@index([productId])
+}
+
+// -----------------------------------------------------------------------------
+// EPIC 3: PRODUCT DOMAIN ENHANCEMENTS
+// -----------------------------------------------------------------------------
+
+model Brand {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @default("")
+  shopId    String
+  logoUrl   String?
+  aliases   String?  @db.Text
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  isDeleted Boolean  @default(false)
+
+  shop     Shop      @relation(fields: [shopId], references: [id])
+  products Product[]
+
+  @@unique([shopId, name])
+  @@index([shopId])
+}
+
+model Manufacturer {
+  id        String   @id @default(cuid())
+  name      String
+  shopId    String
+  country   String?
+  state     String?
+  gstin     String?
+  contact   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop     Shop      @relation(fields: [shopId], references: [id])
+  products Product[]
+
+  @@unique([shopId, name])
+  @@index([shopId])
+}
+
+model ProductRevision {
+  id        String @id @default(cuid())
+  productId String
+  branchId  String
+  shopId    String
+
+  versionNumber Int
+  parentRevId   String?
+
+  isSnapshot  Boolean
+  data        Json
+  contentHash String
+
+  status       RevisionStatus @default(DRAFT)
+  scheduledFor DateTime?
+  publishedAt  DateTime?
+
+  authorId      String
+  commitMessage String?
+  createdAt     DateTime @default(now())
+
+  product        Product            @relation(fields: [productId], references: [id])
+  branch         RevisionBranch     @relation(fields: [branchId], references: [id])
+  parentRevision ProductRevision?   @relation("RevisionHistory", fields: [parentRevId], references: [id])
+  childRevisions ProductRevision[]  @relation("RevisionHistory")
+  approvals      RevisionApproval[]
+  diffs          RevisionDiff[]     @relation("DiffTarget")
+
+  @@unique([productId, versionNumber])
+  @@index([shopId, productId, status])
+  @@index([scheduledFor])
+}
+
+model RevisionBranch {
+  id        String   @id @default(cuid())
+  productId String
+  name      String
+  baseRevId String
+  isMerged  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  product   Product           @relation(fields: [productId], references: [id])
+  revisions ProductRevision[]
+
+  @@unique([productId, name])
+}
+
+model RevisionApproval {
+  id               String         @id @default(cuid())
+  revisionId       String
+  reviewerId       String
+  status           ApprovalStatus
+  comments         String?
+  digitalSignature String?
+  createdAt        DateTime       @default(now())
+  resolvedAt       DateTime?
+
+  revision ProductRevision @relation(fields: [revisionId], references: [id])
+
+  @@index([revisionId])
+}
+
+model RevisionDiff {
+  id          String   @id @default(cuid())
+  sourceRevId String
+  targetRevId String
+  patch       Json
+  createdAt   DateTime @default(now())
+
+  targetRevision ProductRevision @relation("DiffTarget", fields: [targetRevId], references: [id])
+
+  @@unique([sourceRevId, targetRevId])
+}
+
+model VariantAttribute {
+  id        String @id @default(cuid())
+  shopId    String
+  name      String
+  slug      String
+  sortOrder Int    @default(0)
+
+  shop   Shop                    @relation(fields: [shopId], references: [id])
+  values VariantAttributeValue[]
+
+  @@unique([shopId, slug])
+  @@index([shopId])
+}
+
+model VariantAttributeValue {
+  id          String  @id @default(cuid())
+  attributeId String
+  value       String
+  slug        String
+  colorHex    String?
+  sortOrder   Int     @default(0)
+
+  attribute VariantAttribute          @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  variants  ProductVariantAttribute[]
+
+  @@unique([attributeId, slug])
+  @@index([attributeId])
+}
+
+model ProductVariant {
+  id        String  @id @default(cuid())
+  productId String
+  shopId    String
+  sku       String
+  barcode   String?
+
+  costPrice    Decimal? @db.Decimal(10, 2)
+  sellingPrice Decimal? @db.Decimal(10, 2)
+  mrp          Decimal? @db.Decimal(10, 2)
+
+  currentStock Decimal @default(0) @db.Decimal(10, 3)
+  stockVersion Int     @default(0)
+
+  imageUrl String?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  isDeleted Boolean  @default(false)
+
+  product    Product                   @relation(fields: [productId], references: [id])
+  shop       Shop                      @relation(fields: [shopId], references: [id])
+  attributes ProductVariantAttribute[]
+
+  @@unique([shopId, sku, isDeleted])
+  @@index([productId])
+  @@index([shopId])
+}
+
+model ProductVariantAttribute {
+  id               String @id @default(cuid())
+  variantId        String
+  attributeValueId String
+
+  variant        ProductVariant        @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  attributeValue VariantAttributeValue @relation(fields: [attributeValueId], references: [id])
+
+  @@unique([variantId, attributeValueId])
+  @@index([variantId])
+}
+
+model ProductBarcode {
+  id        String   @id @default(cuid())
+  productId String
+  shopId    String
+  barcode   String
+  type      String
+  isPrimary Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shop    Shop    @relation(fields: [shopId], references: [id])
+
+  @@unique([shopId, barcode])
+  @@index([productId])
+}
+
+model ProductAttribute {
+  id        String @id @default(cuid())
+  productId String
+  shopId    String
+  key       String
+  value     String
+  dataType  String @default("STRING")
+  sortOrder Int    @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shop    Shop    @relation(fields: [shopId], references: [id])
+
+  @@unique([productId, key])
+  @@index([shopId, key])
+}
+
+model ProductTag {
+  id        String @id @default(cuid())
+  productId String
+  shopId    String
+  tag       String
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shop    Shop    @relation(fields: [shopId], references: [id])
+
+  @@unique([productId, tag])
+  @@index([shopId, tag])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  shopId    String
+  url       String
+  altText   String?
+  isPrimary Boolean  @default(false)
+  sortOrder Int      @default(0)
+  sizeBytes Int?
+  width     Int?
+  height    Int?
+  hash      String?
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shop    Shop    @relation(fields: [shopId], references: [id])
+
+  @@index([productId])
+}
+
+model ProductPriceTier {
+  id          String   @id @default(cuid())
+  productId   String
+  shopId      String
+  minQuantity Decimal  @db.Decimal(10, 3)
+  maxQuantity Decimal? @db.Decimal(10, 3)
+  price       Decimal  @db.Decimal(10, 2)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shop    Shop    @relation(fields: [shopId], references: [id])
+
+  @@index([productId, minQuantity])
+  @@index([shopId])
+}
+
+model ProductRelationship {
+  id              String   @id @default(cuid())
+  sourceProductId String
+  targetProductId String
+  shopId          String
+  type            String
+  sortOrder       Int      @default(0)
+  quantity        Decimal? @db.Decimal(10, 3)
+  createdAt       DateTime @default(now())
+
+  sourceProduct Product @relation("RelationSource", fields: [sourceProductId], references: [id])
+  targetProduct Product @relation("RelationTarget", fields: [targetProductId], references: [id])
+  shop          Shop    @relation(fields: [shopId], references: [id])
+
+  @@unique([sourceProductId, targetProductId, type])
+  @@index([sourceProductId, type])
+  @@index([shopId])
+}
+
+model SkuHistory {
+  id        String   @id @default(cuid())
+  productId String
+  oldSku    String
+  newSku    String
+  reason    String
+  changedBy String
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+
   @@index([productId])
 }
 
