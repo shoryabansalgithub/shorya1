@@ -9,10 +9,19 @@ datasource db {
 
 enum Role {
   SUPER_ADMIN
+  OWNER
   ADMIN
   MANAGER
   CASHIER
   VIEWER
+}
+
+enum ShopStatus {
+  ACTIVE
+  SUSPENDED
+  LOCKED
+  ARCHIVED
+  DELETED
 }
 
 enum PaymentMode {
@@ -122,7 +131,7 @@ enum LedgerEntryType {
 }
 
 model Shop {
-  id        String    @id @default(cuid())
+  id        String     @id @default(cuid())
   name      String
   address   String?
   city      String?
@@ -130,33 +139,35 @@ model Shop {
   pincode   String?
   phone     String?
   email     String?
-  gstin     String?
   logoUrl   String?
-  currency  String    @default("INR")
-  timezone  String    @default("Asia/Kolkata")
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  isDeleted Boolean   @default(false)
+  status    ShopStatus @default(ACTIVE)
+  ownerId   String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  isDeleted Boolean    @default(false)
   deletedAt DateTime?
 
-  users             User[]
-  categories        Category[]
-  products          Product[]
-  productBatches    ProductBatch[]
-  suppliers         Supplier[]
-  customers         Customer[]
-  shifts            Shift[]
-  invoices          Invoice[]
-  udharTransactions UdharTransaction[]
-  inventoryLogs     InventoryLog[]
-  auditLogs         AuditLog[]
-  purchaseOrders    PurchaseOrder[]
-  stockTransfersIn  StockTransfer[]    @relation("TransferDestinationShop")
-  stockTransfersOut StockTransfer[]    @relation("TransferSourceShop")
-  notifications     Notification[]
+  owner    User          @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  settings ShopSettings?
+
+  users              User[]
+  categories         Category[]
+  products           Product[]
+  productBatches     ProductBatch[]
+  suppliers          Supplier[]
+  customers          Customer[]
+  shifts             Shift[]
+  invoices           Invoice[]
+  udharTransactions  UdharTransaction[]
+  inventoryLogs      InventoryLog[]
+  auditLogs          AuditLog[]
+  purchaseOrders     PurchaseOrder[]
+  stockTransfersIn   StockTransfer[]     @relation("TransferDestinationShop")
+  stockTransfersOut  StockTransfer[]     @relation("TransferSourceShop")
+  notifications      Notification[]
   ledgerTransactions LedgerTransaction[]
   inventoryDriftLogs InventoryDriftLog[]
+  invitations        Invitation[]
 }
 
 model User {
@@ -167,18 +178,20 @@ model User {
   phone          String?
   role           Role
   isActive       Boolean   @default(true)
-  shopId         String?
+  shopId         String
   isLocked       Boolean   @default(false)
   lockedUntil    DateTime?
   lastLoginAt    DateTime?
   lastLoginIp    String?
   failedAttempts Int       @default(0)
+  tokenVersion   Int       @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   isDeleted      Boolean   @default(false)
   deletedAt      DateTime?
 
-  shop              Shop?              @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shop              Shop               @relation(fields: [shopId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ownedShop         Shop?              @relation("ShopOwner")
   refreshTokens     RefreshToken[]
   loginAttempts     LoginAttempt[]
   shiftsOpened      Shift[]            @relation("ShiftOpenedBy")
@@ -204,6 +217,22 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model Invitation {
+  id        String   @id @default(cuid())
+  email     String
+  role      Role
+  shopId    String
+  token     String   @unique
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([email])
 }
 
 model LoginAttempt {
@@ -433,15 +462,15 @@ model Invoice {
   isDeleted      Boolean       @default(false)
   deletedAt      DateTime?
 
-  shop              Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict)
-  customer          Customer?          @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  cashier           User               @relation("InvoiceCashier", fields: [cashierId], references: [id], onDelete: Restrict)
-  shift             Shift?             @relation(fields: [shiftId], references: [id], onDelete: Restrict)
-  items             InvoiceItem[]
-  udharTransactions UdharTransaction[]
-  inventoryLogs     InventoryLog[]
-  originalInvoice   Invoice?           @relation("InvoiceReturns", fields: [originalId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  returnInvoices    Invoice[]          @relation("InvoiceReturns")
+  shop               Shop                @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  customer           Customer?           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  cashier            User                @relation("InvoiceCashier", fields: [cashierId], references: [id], onDelete: Restrict)
+  shift              Shift?              @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  items              InvoiceItem[]
+  udharTransactions  UdharTransaction[]
+  inventoryLogs      InventoryLog[]
+  originalInvoice    Invoice?            @relation("InvoiceReturns", fields: [originalId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  returnInvoices     Invoice[]           @relation("InvoiceReturns")
   ledgerTransactions LedgerTransaction[]
 
   @@unique([shopId, financialYear, invoiceNumber])
@@ -553,16 +582,16 @@ model AuditLog {
 }
 
 model PurchaseOrder {
-  id          String    @id @default(cuid())
+  id          String              @id @default(cuid())
   shopId      String
   supplierId  String
   orderNumber String
   status      PurchaseOrderStatus @default(DRAFT)
-  totalAmount Decimal   @db.Decimal(10, 2)
+  totalAmount Decimal             @db.Decimal(10, 2)
   notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  isDeleted   Boolean   @default(false)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  isDeleted   Boolean             @default(false)
   deletedAt   DateTime?
 
   shop     Shop                @relation(fields: [shopId], references: [id], onDelete: Restrict)
@@ -597,15 +626,15 @@ model PurchaseOrderItem {
 }
 
 model StockTransfer {
-  id                String    @id @default(cuid())
+  id                String              @id @default(cuid())
   sourceShopId      String
   destinationShopId String
   status            StockTransferStatus @default(PENDING)
   totalItems        Int
   notes             String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  isDeleted         Boolean   @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  isDeleted         Boolean             @default(false)
   deletedAt         DateTime?
 
   sourceShop      Shop                @relation("TransferSourceShop", fields: [sourceShopId], references: [id], onDelete: Restrict)
@@ -653,28 +682,28 @@ model Notification {
 }
 
 model OutboxEvent {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   type        String
   payload     Json
-  status      String   @default("PENDING") // PENDING, DONE, FAILED
+  status      String    @default("PENDING") // PENDING, DONE, FAILED
   error       String?
-  retryCount  Int      @default(0)
-  createdAt   DateTime @default(now())
+  retryCount  Int       @default(0)
+  createdAt   DateTime  @default(now())
   processedAt DateTime?
 
   @@index([status, createdAt])
 }
 
 model LedgerTransaction {
-  id            String          @id @default(cuid())
-  shopId        String
-  invoiceId     String?
-  account       LedgerAccount
-  type          LedgerEntryType
-  amount        Decimal         @db.Decimal(10, 2)
-  balanceAfter  Decimal         @db.Decimal(10, 2)
-  description   String?
-  createdAt     DateTime        @default(now())
+  id           String          @id @default(cuid())
+  shopId       String
+  invoiceId    String?
+  account      LedgerAccount
+  type         LedgerEntryType
+  amount       Decimal         @db.Decimal(10, 2)
+  balanceAfter Decimal         @db.Decimal(10, 2)
+  description  String?
+  createdAt    DateTime        @default(now())
 
   shop    Shop     @relation(fields: [shopId], references: [id], onDelete: Restrict)
   invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
@@ -700,4 +729,22 @@ model InventoryDriftLog {
 
   @@index([shopId, createdAt])
   @@index([productId])
+}
+
+model ShopSettings {
+  id               String   @id @default(cuid())
+  shopId           String   @unique
+  currency         String   @default("INR")
+  timezone         String   @default("Asia/Kolkata")
+  gstin            String?
+  locale           String   @default("en-IN")
+  businessCategory String?
+  invoiceNumbering String   @default("PREFIX-YYYY-SEQ")
+  financialYear    String   @default("APR-MAR")
+  subscriptionPlan String   @default("FREE")
+  taxProfile       String   @default("DEFAULT")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }

@@ -10,6 +10,7 @@ export const safeUserSelect = {
   role: true,
   isActive: true,
   shopId: true,
+  tokenVersion: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.UserSelect;
@@ -20,6 +21,11 @@ export const userWithPasswordSelect = {
   isLocked: true,
   lockedUntil: true,
   isDeleted: true,
+  shop: {
+    select: {
+      status: true,
+    },
+  },
 } satisfies Prisma.UserSelect;
 
 export type SafeUserRecord = Prisma.UserGetPayload<{
@@ -36,8 +42,12 @@ export class UserMapper {
    * Prisma entities include secrets such as password hashes; explicit DTO
    * serialization keeps sensitive fields excluded even if the schema grows.
    */
-  static toSafeUserDto(user: SafeUserRecord): SafeUserDto {
-    return plainToInstance(SafeUserDto, user, {
+  static toSafeUserDto(user: SafeUserRecord | UserWithPasswordRecord): SafeUserDto {
+    const plainUser = {
+      ...user,
+      shopStatus: 'shop' in user && user.shop ? user.shop.status : undefined,
+    };
+    return plainToInstance(SafeUserDto, plainUser, {
       excludeExtraneousValues: true,
     });
   }

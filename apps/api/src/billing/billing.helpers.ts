@@ -2,17 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryGateway } from '../inventory/inventory.gateway';
 
+import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
+
 @Injectable()
 export class BillingHelpers {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventoryGateway: InventoryGateway,
+    private readonly tenantContext: TenantContextService
   ) {}
 
   async checkLowStockAlerts(
-    shopId: string,
     deductions: Array<{ productId: string; newStock: number }>,
   ) {
+    const shopId = this.tenantContext.getShopId();
     for (const { productId, newStock } of deductions) {
       const product = await this.prisma.product.findUnique({
         where: { id: productId },
@@ -30,7 +33,7 @@ export class BillingHelpers {
           },
         });
         // Emit real-time alert via Socket.IO
-        this.inventoryGateway.broadcastLowStockAlert(shopId, {
+        this.inventoryGateway.broadcastLowStockAlert({
           productId,
           productName: product.name,
           currentStock: newStock,

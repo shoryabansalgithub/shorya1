@@ -6,14 +6,10 @@ import { InventoryCacheService } from '../inventory/inventory-cache.service';
 import { BillingHelpers } from './billing.helpers';
 import { Decimal } from 'decimal.js';
 import { Prisma } from '@prisma/client';
-import { CorrelationContextService } from '../common/correlation/correlation-context.service';
-import { v4 as uuidv4 } from 'uuid';
+import * as crypto from 'crypto';
 
-interface RequestUser {
-  userId: string;
-  shopId: string;
-  ipAddress?: string;
-}
+
+import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
 
 @Injectable()
 export class BillingService {
@@ -23,14 +19,21 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly inventoryGateway: InventoryGateway,
     private readonly inventoryCache: InventoryCacheService,
-    private readonly billingHelpers: BillingHelpers
+    private readonly billingHelpers: BillingHelpers,
+    private readonly tenantContext: TenantContextService
   ) {}
 
-  async createInvoice(dto: CreateInvoiceDto, user: RequestUser): Promise<any> {
+  async createInvoice(dto: CreateInvoiceDto, ipAddress: string): Promise<any> {
+    const user = {
+      shopId: this.tenantContext.getShopId(),
+      userId: this.tenantContext.getUserId(),
+      ipAddress
+    };
+    
     // Step A: Pre-validate ALL items BEFORE starting the transaction
     const productIds = dto.items.map(i => i.productId);
     const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds }, shopId: user.shopId, isDeleted: false, isActive: true },
+      where: { id: { in: productIds }, isDeleted: false, isActive: true },
       select: {
         id: true, name: true, sku: true, currentStock: true, stockVersion: true,
         sellingPrice: true, costPrice: true, mrp: true, gstRate: true, hsnCode: true, unit: true,
@@ -67,11 +70,11 @@ export class BillingService {
     const decrementedInRedis: Array<{ productId: string; quantity: number }> = [];
     try {
       for (const item of dto.items) {
-        const status = await this.inventoryCache.tryDecrementStock(user.shopId, item.productId, item.quantity);
+        const status = await this.inventoryCache.tryDecrementStock(item.productId, item.quantity);
         if (status === 'insufficient') {
           // Rollback whatever we successfully decremented in Redis before throwing
           for (const doneItem of decrementedInRedis) {
-            await this.inventoryCache.restoreStock(user.shopId, doneItem.productId, doneItem.quantity);
+            await this.inventoryCache.restoreStock(doneItem.productId, doneItem.quantity);
           }
           throw new ConflictException({
             message: `Insufficient stock for a product (fast rejection)`,
@@ -91,7 +94,7 @@ export class BillingService {
       // Redis connection failure: rollback what we can, continue to DB-only path
       this.logger.warn('Redis pre-check failed, falling back to DB-only path', e);
       for (const doneItem of decrementedInRedis) {
-        try { await this.inventoryCache.restoreStock(user.shopId, doneItem.productId, doneItem.quantity); } catch { /* best-effort rollback */ }
+        try { await this.inventoryCache.restoreStock(doneItem.productId, doneItem.quantity); } catch { /* best-effort rollback */ }
       }
       decrementedInRedis.length = 0; // Nothing to compensate later
     }
@@ -102,13 +105,13 @@ export class BillingService {
     }
 
     const existing = await this.prisma.invoice.findFirst({
-      where: { idempotencyKey: dto.idempotencyKey, shopId: user.shopId },
+      where: { idempotencyKey: dto.idempotencyKey },
       include: { items: true, customer: true }
     });
     if (existing) {
       // If we pre-decremented, rollback since we aren't executing the transaction
       for (const doneItem of decrementedInRedis) {
-        await this.inventoryCache.restoreStock(user.shopId, doneItem.productId, doneItem.quantity);
+        await this.inventoryCache.restoreStock(doneItem.productId, doneItem.quantity);
       }
       return existing;
     }
@@ -237,7 +240,7 @@ export class BillingService {
             let customer = null;
             if (dto.customerId) {
               customer = await tx.customer.findFirst({
-                where: { id: dto.customerId, shopId: user.shopId },
+                where: { id: dto.customerId },
                 select: { state: true, outstandingBalance: true, creditLimit: true }
               });
               if (!customer) throw new NotFoundException('Customer not found or belongs to another shop.');
@@ -367,7 +370,6 @@ export class BillingService {
                 invoiceNumber,
                 financialYear,
                 idempotencyKey: dto.idempotencyKey,
-                shopId: user.shopId,
                 customerId: dto.customerId ?? null,
                 cashierId: user.userId,
                 paymentMode: dto.paymentMode,
@@ -399,7 +401,6 @@ export class BillingService {
                 const deduction = stockDeductions.find(d => d.productId === item.productId)!;
                 return {
                   productId: item.productId,
-                  shopId: user.shopId,
                   type: 'SALE',
                   quantityBefore: product.currentStock,
                   quantityChange: -item.quantity,
@@ -419,7 +420,6 @@ export class BillingService {
                 await tx.udharTransaction.create({
                   data: {
                     customerId: dto.customerId,
-                    shopId: user.shopId,
                     invoiceId: invoice.id,
                     recordedById: user.userId,
                     type: 'CREDIT',
@@ -482,7 +482,6 @@ export class BillingService {
             // Step K: Audit Log
             await tx.auditLog.create({
               data: {
-                shopId: user.shopId,
                 userId: user.userId,
                 action: 'CREATE',
                 entity: 'Invoice',
@@ -493,8 +492,8 @@ export class BillingService {
             });
 
             // Step L: Outbox Event Integration
-            const eventId = uuidv4();
-            const correlationId = CorrelationContextService.asAsyncLocalStorage.getStore() || 'system-job';
+            const eventId = crypto.randomUUID();
+            const correlationId = this.tenantContext.getCorrelationId();
 
             await tx.outboxEvent.create({
               data: {
@@ -529,7 +528,7 @@ export class BillingService {
 
               // Compute running balance for debit account
               const lastDebitEntry = await tx.ledgerTransaction.findFirst({
-                where: { shopId: user.shopId, account: debitAccount },
+                where: { account: debitAccount },
                 orderBy: { createdAt: 'desc' }
               });
               const debitBalanceBefore = lastDebitEntry ? lastDebitEntry.balanceAfter.toNumber() : 0;
@@ -537,7 +536,7 @@ export class BillingService {
 
               // Compute running balance for credit account (SALES_REVENUE)
               const lastCreditEntry = await tx.ledgerTransaction.findFirst({
-                where: { shopId: user.shopId, account: 'SALES_REVENUE' },
+                where: { account: 'SALES_REVENUE' },
                 orderBy: { createdAt: 'desc' }
               });
               const creditBalanceBefore = lastCreditEntry ? lastCreditEntry.balanceAfter.toNumber() : 0;
@@ -579,14 +578,14 @@ export class BillingService {
           // Sync Redis with actual DB values for absolute truth alignment
           for (const deduction of stockDeductions) {
             try {
-              await this.inventoryCache.syncStock(user.shopId, deduction.productId, deduction.newStock);
+              await this.inventoryCache.syncStock(deduction.productId, deduction.newStock);
             } catch (syncErr) {
               this.logger.warn(`Redis sync failed for product ${deduction.productId}, will self-heal`, syncErr);
             }
           }
 
-          this.inventoryGateway.broadcastStockUpdate(user.shopId, stockDeductions);
-          this.billingHelpers.checkLowStockAlerts(user.shopId, stockDeductions);
+          this.inventoryGateway.broadcastStockUpdate(stockDeductions);
+          this.billingHelpers.checkLowStockAlerts(stockDeductions);
 
           return result;
 
@@ -599,14 +598,14 @@ export class BillingService {
           ) {
             this.logger.warn(`Idempotency race detected for key ${dto.idempotencyKey}, returning existing invoice`);
             const duplicate = await this.prisma.invoice.findFirst({
-              where: { idempotencyKey: dto.idempotencyKey, shopId: user.shopId },
+              where: { idempotencyKey: dto.idempotencyKey },
               include: { items: true, customer: true }
             });
             if (duplicate) {
               // Redis was already decremented by the winning thread's commit;
               // our pre-check decrement is a surplus — restore it
               for (const doneItem of decrementedInRedis) {
-                try { await this.inventoryCache.restoreStock(user.shopId, doneItem.productId, doneItem.quantity); } catch { /* best-effort rollback */ }
+                try { await this.inventoryCache.restoreStock(doneItem.productId, doneItem.quantity); } catch { /* best-effort rollback */ }
               }
               return duplicate;
             }
@@ -617,7 +616,7 @@ export class BillingService {
             this.logger.warn(`Optimistic lock conflict on attempt ${attempt}, retrying...`);
             await new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
             const freshProducts = await this.prisma.product.findMany({
-              where: { id: { in: productIds }, shopId: user.shopId },
+              where: { id: { in: productIds } },
               select: {
                 id: true, name: true, sku: true, currentStock: true, stockVersion: true,
                 sellingPrice: true, costPrice: true, mrp: true, gstRate: true, hsnCode: true, unit: true,
@@ -645,7 +644,7 @@ export class BillingService {
       this.logger.warn('Billing failed, compensating Redis stock', outerError?.message);
       for (const doneItem of decrementedInRedis) {
         try {
-          await this.inventoryCache.restoreStock(user.shopId, doneItem.productId, doneItem.quantity);
+          await this.inventoryCache.restoreStock(doneItem.productId, doneItem.quantity);
         } catch (restoreErr) {
           this.logger.error(`CRITICAL: Failed to restore Redis stock for product ${doneItem.productId}`, restoreErr);
         }

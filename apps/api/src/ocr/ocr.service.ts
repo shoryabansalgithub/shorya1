@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import Fuse from 'fuse.js';
 
+import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
+
 @Injectable()
 export class OcrService {
   private readonly logger = new Logger(OcrService.name);
@@ -10,9 +12,10 @@ export class OcrService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly tenantContext: TenantContextService
   ) {}
 
-  async processDocument(fileBuffer: Buffer, documentType: string, shopId: string) {
+  async processDocument(fileBuffer: Buffer, documentType: string) {
     this.logger.log(`Starting real OCR processing via Gemini for document type: ${documentType}`);
     
     // Step 1: Base64 encode for Gemini
@@ -22,7 +25,7 @@ export class OcrService {
     const parsedData = await this.parseWithGemini(base64Image);
     
     // Step 3: Match items to real shop inventory using Fuzzy Search
-    const matchedItems = await this.fuzzyMatchProducts(parsedData.items, shopId);
+    const matchedItems = await this.fuzzyMatchProducts(parsedData.items);
     
     return {
       success: true,
@@ -114,9 +117,10 @@ Example: [{"rawName": "Maggi Noodles", "qty": 2, "price": 14.50}]`;
     throw new BadRequestException('Gemini OCR exhausted all retry attempts');
   }
 
-  private async fuzzyMatchProducts(extractedItems: any[], shopId: string): Promise<any[]> {
+  private async fuzzyMatchProducts(extractedItems: any[]): Promise<any[]> {
     this.logger.log('Running Fuse.js fuzzy matching against real inventory...');
     
+    const shopId = this.tenantContext.getShopId();
     const inventory = await this.prisma.product.findMany({
       where: { shopId, isDeleted: false, isActive: true },
       select: { id: true, name: true, sellingPrice: true }

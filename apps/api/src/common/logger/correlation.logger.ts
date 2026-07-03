@@ -1,5 +1,5 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
-import { CorrelationContextService } from '../correlation/correlation-context.service';
+import { TenantContextService } from '../../iam/tenant-context/tenant-context.service';
 
 @Injectable()
 export class CorrelationLogger extends ConsoleLogger {
@@ -8,7 +8,7 @@ export class CorrelationLogger extends ConsoleLogger {
   }
 
   private formatMessageWithCorrelation(message: any): any {
-    const correlationId = CorrelationContextService.asAsyncLocalStorage.getStore() || 'system-job';
+    const correlationId = TenantContextService.asAsyncLocalStorage.getStore()?.correlationId || 'system-job';
     
     let safeMessage = message;
 

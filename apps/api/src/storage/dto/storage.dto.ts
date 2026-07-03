@@ -16,14 +16,8 @@ import {
 export class CreateCustomerFolderDto {
   @ApiProperty()
   @IsString()
-  @MaxLength(128)
-  name: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
   @MaxLength(64)
-  customerId?: string;
+  customerId: string;
 
   @ApiPropertyOptional()
   @IsOptional()

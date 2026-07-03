@@ -3,7 +3,9 @@ import { AppModule } from './app.module';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { CorrelationLogger } from './common/logger/correlation.logger';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import helmet from 'helmet';
+import { AuthenticatedIoAdapter } from './iam/websockets/authenticated-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -13,6 +15,9 @@ async function bootstrap() {
   // 1. Global Logger Binding
   const correlationLogger = new CorrelationLogger();
   app.useLogger(correlationLogger);
+
+  // WebSocket Authentication Adapter
+  app.useWebSocketAdapter(new AuthenticatedIoAdapter(app));
   
   const logger = new Logger('Bootstrap');
 
@@ -42,6 +47,9 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Global Exception Filter — consistent JSON error envelope with correlationId
+  app.useGlobalFilters(new GlobalExceptionFilter());
 
   // Swagger (Disabled in Production)
   if (process.env.NODE_ENV !== 'production') {

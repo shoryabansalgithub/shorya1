@@ -18,9 +18,14 @@ import { OcrModule } from './ocr/ocr.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { RolesGuard } from './auth/roles.guard';
+import { TenantGuard } from './iam/guards/tenant.guard';
+import { IamModule } from './iam/iam.module';
 import { CronLockModule } from './common/cron-lock/cron-lock.module';
 import { OutboxModule } from './common/outbox/outbox.module';
 import { CorrelationModule } from './common/correlation/correlation.module';
+import { InvitationsModule } from './invitations/invitations.module';
+import { ShopsModule } from './shops/shops.module';
 
 @Module({
   imports: [
@@ -93,12 +98,22 @@ import { CorrelationModule } from './common/correlation/correlation.module';
     CronLockModule,
     OutboxModule,
     CorrelationModule,
+    IamModule,
+    InvitationsModule,
+    ShopsModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
+    // Global guards — execution order follows registration order:
+    // 1. ThrottlerGuard  (rate limiting)
+    // 2. JwtAuthGuard    (authentication)
+    // 3. TenantGuard     (tenant isolation — rejects shopId=null)
+    // 4. RolesGuard      (authorization — checks @Roles() metadata)
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: TenantGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

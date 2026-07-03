@@ -9,7 +9,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('ocr')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.MANAGER)
+@Roles(Role.OWNER, Role.ADMIN, Role.SUPER_ADMIN, Role.MANAGER)
 @ApiBearerAuth()
 @Controller('ocr')
 export class OcrController {
@@ -27,7 +27,7 @@ export class OcrController {
     }
 
     // Pass the file buffer to the real Gemini OCR service
-    const result = await this.ocrService.processDocument(file.buffer, documentType, req.user.shopId);
+    const result = await this.ocrService.processDocument(file.buffer, documentType);
     return result;
   }
 }

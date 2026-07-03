@@ -2,6 +2,7 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
 
 @Injectable()
 export class InventoryCacheService {
@@ -11,6 +12,7 @@ export class InventoryCacheService {
   constructor(
     @Inject(CACHE_MANAGER) private cache: Cache,
     private prisma: PrismaService,
+    private readonly tenantContext: TenantContextService,
   ) {
     // Safely attempt to access the underlying Redis client.
     // Falls back to null if the cache store is not Redis (e.g., in-memory).
@@ -31,8 +33,9 @@ export class InventoryCacheService {
   }
 
   // Warm the cache on startup (load all product stocks into Redis)
-  async warmCache(shopId: string): Promise<void> {
+  async warmCache(): Promise<void> {
     if (!this.redis) return;
+    const shopId = this.tenantContext.getShopId();
     const products = await this.prisma.product.findMany({
       where: { shopId, isDeleted: false },
       select: { id: true, currentStock: true },
@@ -52,11 +55,11 @@ export class InventoryCacheService {
   // Atomic pre-decrement in Redis (BEFORE the DB transaction)
   // Returns: 'ok' | 'insufficient' | 'cache_miss'
   async tryDecrementStock(
-    shopId: string,
     productId: string,
     quantity: number,
   ): Promise<'ok' | 'insufficient' | 'cache_miss'> {
     if (!this.redis) return 'cache_miss';
+    const shopId = this.tenantContext.getShopId();
     const key = `stock:${shopId}:${productId}`;
     const exists = await this.redis.exists(key);
     if (!exists) return 'cache_miss'; // Fall back to DB-only path
@@ -86,22 +89,22 @@ export class InventoryCacheService {
 
   // Called after DB transaction rolls back — restore the Redis counter
   async restoreStock(
-    shopId: string,
     productId: string,
     quantity: number,
   ): Promise<void> {
     if (!this.redis) return;
+    const shopId = this.tenantContext.getShopId();
     const key = `stock:${shopId}:${productId}`;
     await this.redis.incrbyfloat(key, quantity); // Support fractional
   }
 
   // Called when stock is manually adjusted — keep Redis in sync
   async syncStock(
-    shopId: string,
     productId: string,
     newStock: number,
   ): Promise<void> {
     if (!this.redis) return;
+    const shopId = this.tenantContext.getShopId();
     await this.redis.set(`stock:${shopId}:${productId}`, newStock.toString(), 'EX', 3600);
   }
 }

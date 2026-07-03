@@ -1,7 +1,7 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { CorrelationContextService } from '../correlation/correlation-context.service';
+
 
 @Injectable()
 export class CorrelationIdMiddleware implements NestMiddleware {
@@ -22,9 +22,6 @@ export class CorrelationIdMiddleware implements NestMiddleware {
     // Attach to Response Header for client to trace
     res.setHeader('x-correlation-id', correlationId);
 
-    // Enter Async Context
-    CorrelationContextService.asAsyncLocalStorage.run(correlationId, () => {
-      next();
-    });
+    next();
   }
 }

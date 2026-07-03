@@ -10,19 +10,17 @@ export class CustomersController {
 
   @Post()
   async create(@Request() req: any, @Body() dto: CreateCustomerDto) {
-    // Map strictly allowed fields and inject trusted shopId from JWT
     const safeData = {
       name: dto.name,
       phone: dto.phone,
       email: dto.email,
       address: dto.address,
-      shopId: req.user.shopId,
     };
     return this.customersService.create(safeData);
   }
 
   @Get()
-  async findAll(@Request() req: any) {
-    return this.customersService.findAll(req.user.shopId);
+  async findAll() {
+    return this.customersService.findAll();
   }
 }

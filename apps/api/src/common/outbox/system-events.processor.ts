@@ -3,7 +3,9 @@ import { Job, UnrecoverableError } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
-import { CorrelationContextService } from '../correlation/correlation-context.service';
+import { TenantContextService } from '../../iam/tenant-context/tenant-context.service';
+import { TenantContext } from '../../iam/tenant-context/tenant-context.interface';
+import * as crypto from 'crypto';
 
 @Processor('system-events')
 export class SystemEventsProcessor extends WorkerHost {
@@ -20,9 +22,15 @@ export class SystemEventsProcessor extends WorkerHost {
     }
 
     const correlationId = job.data?.correlationId || 'legacy-event';
+    const context: TenantContext = {
+      correlationId,
+      requestId: crypto.randomUUID(),
+      shopId: job.data?.shopId,
+      userId: job.data?.userId,
+    };
 
     return new Promise((resolve, reject) => {
-      CorrelationContextService.asAsyncLocalStorage.run(correlationId, async () => {
+      TenantContextService.asAsyncLocalStorage.run(context, async () => {
         this.logger.debug(`Processing job ${job.name} (Event ID: ${eventId})`);
 
         try {

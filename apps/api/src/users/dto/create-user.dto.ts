@@ -16,4 +16,10 @@ export class CreateUserDto {
   @MinLength(1)
   @MaxLength(100)
   name: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  shopName: string;
 }

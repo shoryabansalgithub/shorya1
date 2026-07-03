@@ -10,6 +10,8 @@ interface JwtPayload {
   sub: string;
   email: string;
   role: string;
+  shopId: string;
+  tokenVersion: number;
 }
 
 @Injectable()
@@ -33,6 +35,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     if (user.isDeleted) {
       throw new UnauthorizedException('Account has been deleted');
+    }
+
+    if (user.tokenVersion !== payload.tokenVersion) {
+      throw new UnauthorizedException('Session has been revoked');
     }
 
     if (!user.isActive) {

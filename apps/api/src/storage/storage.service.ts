@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
@@ -12,22 +13,10 @@ import * as crypto from 'crypto';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { SafeUserDto } from '../users/dto/safe-user.dto';
-import {
-  BackupType,
-  CloudUploadFolder,
-  CUSTOMER_SUBDIRECTORIES,
-  ROOT_SUBDIRECTORIES,
-  StorageCustomerDirectory,
-} from './storage-security.constants';
+import { StorageCustomerDirectory } from './storage-security.constants';
 import { DeleteStorageFileDto } from './dto/storage.dto';
-import {
-  normalizeDatePath,
-  resolveCustomerDirectory,
-  safeJoin,
-  sanitizeCustomerName,
-  sanitizePathSegment,
-  sanitizeStorageFileName,
-} from './storage-path.util';
+import { StoragePathBuilder } from './storage-path.builder';
+import { PrismaService } from '../prisma/prisma.service';
 
 type AuditLevel = 'info' | 'error';
 
@@ -37,19 +26,18 @@ export interface BackupResult {
   size: number;
 }
 
+import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
+
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
-  private readonly rootFolder: string;
   private readonly s3Client: S3Client;
-  private readonly initialized: Promise<void>;
 
-  constructor(private readonly configService: ConfigService) {
-    this.rootFolder = path.resolve(
-      this.configService.get<string>('STORAGE_ROOT') ||
-        path.join(process.cwd(), 'data', 'storage'),
-    );
-
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
+    private readonly tenantContext: TenantContextService,
+  ) {
     this.s3Client = new S3Client({
       region: this.configService.get<string>('S3_REGION') || 'auto',
       endpoint: this.configService.get<string>('S3_ENDPOINT'),
@@ -58,39 +46,6 @@ export class StorageService {
         secretAccessKey: this.configService.get<string>('S3_SECRET_KEY') || '',
       },
     });
-
-    this.initialized = this.initializeSystem();
-  }
-
-  private async initializeSystem(): Promise<void> {
-    try {
-      await fs.ensureDir(this.rootFolder);
-      for (const folder of ROOT_SUBDIRECTORIES) {
-        await fs.ensureDir(safeJoin(this.rootFolder, folder));
-      }
-
-      await this.ensureJsonFile(
-        safeJoin(this.rootFolder, 'System', 'customer_index.json'),
-        [],
-      );
-      await this.ensureJsonFile(
-        safeJoin(this.rootFolder, 'System', 'invoice_registry.json'),
-        [],
-      );
-      await this.ensureJsonFile(
-        safeJoin(this.rootFolder, 'System', 'search_index.json'),
-        { invoices: [], ocr: [], customers: [], payments: [] },
-      );
-
-      this.logger.log(`Storage system initialized at ${this.rootFolder}`);
-    } catch (error) {
-      this.logger.error('Failed to initialize storage system', error);
-      throw error;
-    }
-  }
-
-  private async ensureInitialized(): Promise<void> {
-    await this.initialized;
   }
 
   private async ensureJsonFile(
@@ -98,104 +53,86 @@ export class StorageService {
     defaultData: Record<string, unknown> | unknown[],
   ): Promise<void> {
     if (!(await fs.pathExists(filePath))) {
+      await fs.ensureDir(path.dirname(filePath));
       await fs.writeJson(filePath, defaultData, { spaces: 2 });
     }
   }
 
-  private getYearMonthPath(): string {
-    const date = new Date();
-    return path.join(
-      date.getFullYear().toString(),
-      date.toLocaleString('default', { month: 'long' }),
-    );
-  }
-
-  private getActor(actor: SafeUserDto): string {
-    return `${actor.id}:${actor.email}:${actor.role}`;
+  private getActor(): string {
+    return this.tenantContext.getUserId();
   }
 
   /**
-   * Audit hook: this currently writes to local append-only logs and Nest logs.
-   * It is intentionally centralized so it can later fan out to Prisma AuditLog,
-   * SIEM, CloudWatch, or GCP Audit Logs without changing controller code.
+   * Enforces that the requested customer belongs to the requested shop.
    */
+  private async validateCustomerOwnership(customerId: string): Promise<void> {
+    const shopId = this.tenantContext.getShopId();
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { shopId: true },
+    });
+    if (!customer || customer.shopId !== shopId) {
+      throw new UnauthorizedException('Customer does not exist or does not belong to your shop');
+    }
+  }
+
   async logAction(
     action: string,
     level: AuditLevel = 'info',
-    actor?: SafeUserDto,
   ): Promise<void> {
-    await this.ensureInitialized();
-    const logFile = safeJoin(
-      this.rootFolder,
-      'Logs',
-      `${level}_${new Date().toISOString().split('T')[0]}.log`,
-    );
+    const shopId = this.tenantContext.getShopId();
+    const fileName = `${level}_${new Date().toISOString().split('T')[0]}.log`;
+    const logFile = StoragePathBuilder.getLogFile(shopId, fileName);
+    
+    await fs.ensureDir(path.dirname(logFile));
+
     const timestamp = new Date().toISOString();
-    const actorInfo = actor ? ` actor=${this.getActor(actor)}` : '';
+    const actorInfo = ` actor=${this.getActor()}`;
     const logEntry = `[${timestamp}]${actorInfo} ${action}\n`;
+    
     await fs.appendFile(logFile, logEntry);
-    this.logger[level === 'info' ? 'log' : 'error'](`${action}${actorInfo}`);
+    this.logger[level === 'info' ? 'log' : 'error'](`[Shop:${shopId}] ${action}${actorInfo}`);
   }
 
   async createCustomerFolder(
-    customerName: string,
     customerId: string,
-    actor: SafeUserDto,
   ): Promise<string> {
-    await this.ensureInitialized();
-    const sanitizedName = sanitizeCustomerName(customerName);
-    const safeCustomerId = sanitizePathSegment(customerId, 'customerId');
-    const customerPath = safeJoin(this.rootFolder, 'Customers', sanitizedName);
+    const shopId = this.tenantContext.getShopId();
+    const customerPath = StoragePathBuilder.getCustomerDirectory(shopId, customerId, 'Profile');
+    
+    await fs.ensureDir(customerPath);
 
-    for (const folder of CUSTOMER_SUBDIRECTORIES) {
-      await fs.ensureDir(safeJoin(customerPath, folder));
-    }
-
-    const metaPath = safeJoin(customerPath, 'customer.meta.json');
+    const metaPath = path.join(customerPath, 'customer.meta.json');
     if (!(await fs.pathExists(metaPath))) {
       await fs.writeJson(
         metaPath,
         {
-          customerId: safeCustomerId,
-          name: customerName,
+          customerId,
           createdAt: new Date().toISOString().split('T')[0],
           totalInvoices: 0,
-          totalPending: 0,
         },
         { spaces: 2 },
       );
     }
 
-    await this.logAction(
-      `Created customer storage folder customer=${sanitizedName}`,
-      'info',
-      actor,
-    );
-    return path.join('Customers', sanitizedName);
+    await this.logAction(`Created customer folder customer=${customerId}`, 'info');
+    return customerPath; // Returning full path for local reference
   }
 
   async updateCustomerIndex(
     customerData: Record<string, unknown>,
-    actor: SafeUserDto,
   ): Promise<void> {
-    await this.ensureInitialized();
-    const indexPath = safeJoin(this.rootFolder, 'System', 'customer_index.json');
-    const index = (await fs.readJson(indexPath).catch(() => [])) as Array<
-      Record<string, unknown>
-    >;
-
-    const customerId = customerData.customerId;
-    const customerName =
-      typeof customerData.name === 'string' ? customerData.name : 'Unknown';
-    const sanitizedName = sanitizeCustomerName(customerName);
-
-    const existingIndex = index.findIndex(
-      (customer) => customer.customerId === customerId,
-    );
-
+    const shopId = this.tenantContext.getShopId();
+    const indexPath = StoragePathBuilder.getSystemFile(shopId, 'customer_index.json');
+    await fs.ensureDir(path.dirname(indexPath));
+    
+    const index = (await fs.readJson(indexPath).catch(() => [])) as Array<Record<string, unknown>>;
+    const customerId = customerData.customerId as string;
+    
+    const existingIndex = index.findIndex((c) => c.customerId === customerId);
+    
     const safeCustomerData = {
       ...customerData,
-      folderPath: path.join('Customers', sanitizedName),
       updatedAt: new Date().toISOString(),
     };
 
@@ -209,231 +146,141 @@ export class StorageService {
     }
 
     await fs.writeJson(indexPath, index, { spaces: 2 });
-    await this.logAction(
-      `Updated customer index customer=${sanitizedName}`,
-      'info',
-      actor,
-    );
+    await this.logAction(`Updated customer index customer=${customerId}`, 'info');
   }
 
   async storeInvoice(
-    customerName: string,
+    customerId: string,
     invoiceId: string,
     pdfFile: Express.Multer.File,
     jsonContent: Record<string, unknown>,
     thumbnailFile: Express.Multer.File | undefined,
-    actor: SafeUserDto,
   ): Promise<void> {
-    await this.ensureInitialized();
-    const sanitizedName = sanitizeCustomerName(customerName);
-    const safeInvoiceId = sanitizePathSegment(invoiceId, 'invoiceId');
-    const invoiceDir = safeJoin(
-      resolveCustomerDirectory(
-        this.rootFolder,
-        sanitizedName,
-        StorageCustomerDirectory.Invoices,
-      ),
-      this.getYearMonthPath(),
-    );
+    const shopId = this.tenantContext.getShopId();
+    await this.validateCustomerOwnership(customerId);
 
+    const invoiceDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.Invoices);
     await fs.ensureDir(invoiceDir);
 
-    const baseName = `INV-${safeInvoiceId}`;
-    await fs.writeFile(safeJoin(invoiceDir, `${baseName}.pdf`), pdfFile.buffer);
-    await fs.writeJson(safeJoin(invoiceDir, `${baseName}.json`), jsonContent, {
-      spaces: 2,
-    });
+    const baseName = `INV-${invoiceId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    await fs.writeFile(path.join(invoiceDir, `${baseName}.pdf`), pdfFile.buffer);
+    await fs.writeJson(path.join(invoiceDir, `${baseName}.json`), jsonContent, { spaces: 2 });
 
     if (thumbnailFile) {
-      await fs.writeFile(
-        safeJoin(invoiceDir, `${baseName}-preview.jpg`),
-        thumbnailFile.buffer,
-      );
+      await fs.writeFile(path.join(invoiceDir, `${baseName}-preview.jpg`), thumbnailFile.buffer);
     }
 
-    const registryPath = safeJoin(
-      this.rootFolder,
-      'System',
-      'invoice_registry.json',
-    );
-    const registry = (await fs.readJson(registryPath).catch(() => [])) as Array<
-      Record<string, unknown>
-    >;
+    const registryPath = StoragePathBuilder.getSystemFile(shopId, 'invoice_registry.json');
+    await fs.ensureDir(path.dirname(registryPath));
+    const registry = (await fs.readJson(registryPath).catch(() => [])) as Array<Record<string, unknown>>;
 
     registry.push({
-      invoiceId: safeInvoiceId,
-      customerName: sanitizedName,
-      status:
-        typeof jsonContent.status === 'string' ? jsonContent.status : 'Generated',
+      invoiceId,
+      customerId,
+      status: typeof jsonContent.status === 'string' ? jsonContent.status : 'Generated',
       timestamp: new Date().toISOString(),
     });
+    
     await fs.writeJson(registryPath, registry, { spaces: 2 });
-
-    await this.logAction(
-      `Stored invoice invoice=${safeInvoiceId} customer=${sanitizedName}`,
-      'info',
-      actor,
-    );
+    await this.logAction(`Stored invoice invoice=${invoiceId} customer=${customerId}`, 'info');
   }
 
   async storeCapturedBill(
-    customerName: string,
+    customerId: string,
     billId: string,
     imageFile: Express.Multer.File,
     pdfFile: Express.Multer.File | undefined,
     ocrText: string | undefined,
     thumbnailFile: Express.Multer.File | undefined,
-    actor: SafeUserDto,
   ): Promise<void> {
-    await this.ensureInitialized();
-    const sanitizedName =
-      customerName === 'Walk-in' ? 'Walk-in' : sanitizeCustomerName(customerName);
-    const safeBillId = sanitizePathSegment(billId, 'billId');
-    const datePath = this.getYearMonthPath();
-    const baseName = `BILL-${safeBillId}`;
+    const shopId = this.tenantContext.getShopId();
+    // Walk-ins might bypass customer ownership if customerId is explicitly 'Walk-in'
+    if (customerId !== 'Walk-in') {
+      await this.validateCustomerOwnership(customerId);
+    }
 
-    const photoDir = safeJoin(
-      resolveCustomerDirectory(
-        this.rootFolder,
-        sanitizedName,
-        StorageCustomerDirectory.OriginalPhotos,
-      ),
-      datePath,
-    );
-    const billsDir = safeJoin(
-      resolveCustomerDirectory(
-        this.rootFolder,
-        sanitizedName,
-        StorageCustomerDirectory.Bills,
-      ),
-      datePath,
-    );
-
+    const baseName = `BILL-${billId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    
+    const photoDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.OriginalPhotos);
+    const billsDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.Bills);
+    
     await fs.ensureDir(photoDir);
     await fs.ensureDir(billsDir);
-    await fs.writeFile(safeJoin(photoDir, `${baseName}.jpg`), imageFile.buffer);
-    await fs.writeFile(safeJoin(billsDir, `${baseName}.jpg`), imageFile.buffer);
+    
+    await fs.writeFile(path.join(photoDir, `${baseName}.jpg`), imageFile.buffer);
+    await fs.writeFile(path.join(billsDir, `${baseName}.jpg`), imageFile.buffer);
 
     if (thumbnailFile) {
-      await fs.writeFile(
-        safeJoin(billsDir, `${baseName}-thumb.jpg`),
-        thumbnailFile.buffer,
-      );
+      await fs.writeFile(path.join(billsDir, `${baseName}-thumb.jpg`), thumbnailFile.buffer);
     }
 
     if (pdfFile) {
-      const pdfDir = safeJoin(
-        resolveCustomerDirectory(
-          this.rootFolder,
-          sanitizedName,
-          StorageCustomerDirectory.PDFs,
-        ),
-        datePath,
-      );
+      const pdfDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.PDFs);
       await fs.ensureDir(pdfDir);
-      await fs.writeFile(safeJoin(pdfDir, `${baseName}.pdf`), pdfFile.buffer);
-      await fs.writeFile(safeJoin(billsDir, `${baseName}.pdf`), pdfFile.buffer);
+      await fs.writeFile(path.join(pdfDir, `${baseName}.pdf`), pdfFile.buffer);
+      await fs.writeFile(path.join(billsDir, `${baseName}.pdf`), pdfFile.buffer);
     }
 
     if (ocrText) {
-      const ocrDir = safeJoin(
-        resolveCustomerDirectory(
-          this.rootFolder,
-          sanitizedName,
-          StorageCustomerDirectory.OCR,
-        ),
-        datePath,
-      );
+      const ocrDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.OCR);
       await fs.ensureDir(ocrDir);
-      await fs.writeFile(safeJoin(ocrDir, `${baseName}.txt`), ocrText);
-      await fs.writeFile(safeJoin(billsDir, `${baseName}.txt`), ocrText);
+      await fs.writeFile(path.join(ocrDir, `${baseName}.txt`), ocrText);
+      await fs.writeFile(path.join(billsDir, `${baseName}.txt`), ocrText);
     }
 
-    await this.logAction(
-      `Stored captured bill bill=${safeBillId} customer=${sanitizedName}`,
-      'info',
-      actor,
-    );
+    await this.logAction(`Stored captured bill bill=${billId} customer=${customerId}`, 'info');
   }
 
   async storePayment(
-    customerName: string,
+    customerId: string,
     paymentData: Record<string, unknown>,
-    actor: SafeUserDto,
   ): Promise<void> {
-    await this.ensureInitialized();
-    const sanitizedName = sanitizeCustomerName(customerName);
-    const paymentsDir = safeJoin(
-      resolveCustomerDirectory(
-        this.rootFolder,
-        sanitizedName,
-        StorageCustomerDirectory.Payments,
-      ),
-      this.getYearMonthPath(),
-    );
+    const shopId = this.tenantContext.getShopId();
+    await this.validateCustomerOwnership(customerId);
 
+    const paymentsDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.Payments);
     await fs.ensureDir(paymentsDir);
 
     const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '_');
     const paymentId = crypto.randomBytes(8).toString('hex');
     const fileName = `PAYMENT-${dateStr}-${paymentId}.json`;
 
-    await fs.writeJson(safeJoin(paymentsDir, fileName), paymentData, {
-      spaces: 2,
-    });
-    await this.logAction(
-      `Stored payment customer=${sanitizedName} file=${fileName}`,
-      'info',
-      actor,
-    );
+    await fs.writeJson(path.join(paymentsDir, fileName), paymentData, { spaces: 2 });
+    await this.logAction(`Stored payment customer=${customerId} file=${fileName}`, 'info');
   }
 
   async storeStatement(
-    customerName: string,
+    customerId: string,
     pdfFile: Express.Multer.File,
-    actor: SafeUserDto,
   ): Promise<void> {
-    await this.ensureInitialized();
-    const sanitizedName = sanitizeCustomerName(customerName);
-    const statementsDir = safeJoin(
-      resolveCustomerDirectory(
-        this.rootFolder,
-        sanitizedName,
-        StorageCustomerDirectory.Statements,
-      ),
-      this.getYearMonthPath(),
-    );
+    const shopId = this.tenantContext.getShopId();
+    await this.validateCustomerOwnership(customerId);
 
+    const statementsDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.Statements);
     await fs.ensureDir(statementsDir);
 
-    const month = new Date()
-      .toLocaleString('default', { month: 'short', year: 'numeric' })
-      .toUpperCase()
-      .replace(' ', '-');
+    const month = new Date().toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase().replace(' ', '-');
     const fileName = `STATEMENT-${month}.pdf`;
 
-    await fs.writeFile(safeJoin(statementsDir, fileName), pdfFile.buffer);
-    await this.logAction(
-      `Stored statement customer=${sanitizedName} file=${fileName}`,
-      'info',
-      actor,
-    );
+    await fs.writeFile(path.join(statementsDir, fileName), pdfFile.buffer);
+    await this.logAction(`Stored statement customer=${customerId} file=${fileName}`, 'info');
   }
 
   async softDeleteFile(
-    customerName: string,
+    customerId: string,
     dto: DeleteStorageFileDto,
-    actor: SafeUserDto,
   ): Promise<{ success: true; newPath: string }> {
-    await this.ensureInitialized();
-    const sanitizedName = sanitizeCustomerName(customerName);
-    const datePath = normalizeDatePath(dto.datePath);
-    const fileName = sanitizeStorageFileName(dto.fileName);
-    const originalDir = safeJoin(
-      resolveCustomerDirectory(this.rootFolder, sanitizedName, dto.category),
-      datePath,
-    );
-    const originalFilePath = safeJoin(originalDir, fileName);
+    const shopId = this.tenantContext.getShopId();
+    await this.validateCustomerOwnership(customerId);
+
+    // Reconstruct the datePath if needed, or if we removed datePath from DB logic, we just find it.
+    // Assuming the DTO still passes datePath for now if it exists, or we search inside the folder.
+    // For extreme safety, we will just use the builder to get the base category folder, then append the filename.
+    const originalDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, dto.category);
+    
+    // Anti-traversal check on filename
+    const safeFileName = dto.fileName.replace(/[^a-zA-Z0-9_.-]/g, '');
+    const originalFilePath = path.join(originalDir, safeFileName); // Note: we are ignoring datePath to prevent traversal if it existed.
 
     if (!(await fs.pathExists(originalFilePath))) {
       throw new NotFoundException('File was not found in allowed storage scope');
@@ -444,45 +291,29 @@ export class StorageService {
       throw new BadRequestException('Only files can be deleted');
     }
 
-    const deletedDir = safeJoin(this.rootFolder, 'Deleted', sanitizedName);
-    await fs.ensureDir(deletedDir);
-
-    const deletedFilePath = safeJoin(
-      deletedDir,
-      `${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${fileName}`,
-    );
+    const deletedFilePath = StoragePathBuilder.getDeletedFileTarget(shopId, safeFileName);
+    await fs.ensureDir(path.dirname(deletedFilePath));
 
     try {
       await fs.move(originalFilePath, deletedFilePath, { overwrite: false });
-      await this.logAction(
-        `Soft deleted file customer=${sanitizedName} category=${dto.category} file=${fileName}`,
-        'info',
-        actor,
-      );
-      return {
-        success: true,
-        newPath: path.relative(this.rootFolder, deletedFilePath),
-      };
+      await this.logAction(`Soft deleted file customer=${customerId} category=${dto.category} file=${safeFileName}`, 'info');
+      return { success: true, newPath: deletedFilePath };
     } catch (error) {
-      await this.logAction(
-        `Failed to delete file customer=${sanitizedName} file=${fileName}`,
-        'error',
-        actor,
-      );
+      await this.logAction(`Failed to delete file customer=${customerId} file=${safeFileName}`, 'error');
       throw error;
     }
   }
 
   async createBackup(
-    type: BackupType = BackupType.Daily,
-    actor: SafeUserDto,
+    type: string = 'Daily',
   ): Promise<BackupResult> {
-    await this.ensureInitialized();
-    const backupDir = safeJoin(this.rootFolder, 'Backups', type);
+    const shopId = this.tenantContext.getShopId();
+    const backupDir = StoragePathBuilder.getBackupDirectory(shopId, type);
     await fs.ensureDir(backupDir);
 
     const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '_');
-    const backupPath = safeJoin(backupDir, `backup_${dateStr}.zip`);
+    const backupPath = path.join(backupDir, `backup_${dateStr}.zip`);
+    const shopRoot = StoragePathBuilder.getShopRoot(shopId);
 
     return new Promise<BackupResult>((resolve, reject) => {
       const output = fs.createWriteStream(backupPath);
@@ -490,26 +321,23 @@ export class StorageService {
 
       output.on('close', () => {
         const size = archive.pointer();
-        this.logAction(
-          `Created backup type=${type} file=${path.basename(backupPath)} size=${size}`,
-          'info',
-          actor,
-        )
-          .then(() => resolve({ success: true, path: path.relative(this.rootFolder, backupPath), size }))
+        this.logAction(`Created backup type=${type} file=${path.basename(backupPath)} size=${size}`, 'info')
+          .then(() => resolve({ success: true, path: backupPath, size }))
           .catch(reject);
       });
 
       output.on('error', reject);
       archive.on('error', (error: Error) => {
-        this.logAction(`Backup error type=${type}: ${error.message}`, 'error', actor)
+        this.logAction(`Backup error type=${type}: ${error.message}`, 'error')
           .then(() => reject(error))
           .catch(reject);
       });
 
       archive.pipe(output);
 
-      for (const dir of ['Customers', 'Database', 'System', 'Logs']) {
-        const dirPath = safeJoin(this.rootFolder, dir);
+      // Only zip the specific shop's data
+      for (const dir of ['Customers', 'System', 'Logs']) {
+        const dirPath = path.join(shopRoot, dir);
         if (fs.existsSync(dirPath)) {
           archive.directory(dirPath, dir);
         }
@@ -521,23 +349,22 @@ export class StorageService {
 
   async uploadFileToCloud(
     file: Express.Multer.File,
-    folder: CloudUploadFolder = CloudUploadFolder.General,
-    actor: SafeUserDto,
+    folder: string = 'general',
   ): Promise<string> {
-    await this.ensureInitialized();
+    const shopId = this.tenantContext.getShopId();
     const bucketName = this.configService.get<string>('S3_BUCKET');
     if (!bucketName) {
       throw new InternalServerErrorException('Cloud storage is not configured');
     }
 
-    const safeOriginalName = sanitizeStorageFileName(file.originalname);
+    const safeOriginalName = file.originalname.replace(/[^a-zA-Z0-9_.-]/g, '');
     const uniqueId = crypto.randomBytes(8).toString('hex');
-    const sanitizedName = sanitizePathSegment(
-      path.parse(safeOriginalName).name,
-      'fileName',
-    );
-    const ext = path.extname(safeOriginalName).toLowerCase();
-    const objectKey = `${folder}/${sanitizedName}-${uniqueId}${ext}`;
+    const parsed = path.parse(safeOriginalName);
+    const sanitizedName = parsed.name;
+    const ext = parsed.ext.toLowerCase();
+    
+    const prefix = StoragePathBuilder.getS3Prefix(shopId, folder);
+    const objectKey = `${prefix}/${sanitizedName}-${uniqueId}${ext}`;
 
     const command = new PutObjectCommand({
       Bucket: bucketName,
@@ -548,7 +375,7 @@ export class StorageService {
 
     try {
       await this.s3Client.send(command);
-      await this.logAction(`Uploaded file to cloud key=${objectKey}`, 'info', actor);
+      await this.logAction(`Uploaded file to cloud key=${objectKey}`, 'info');
 
       const endpoint = this.configService.get<string>('S3_ENDPOINT');
       const publicUrlBase = this.configService.get<string>('S3_PUBLIC_URL');
@@ -560,7 +387,7 @@ export class StorageService {
       const domain = endpoint ? new URL(endpoint).hostname : 's3.amazonaws.com';
       return `https://${bucketName}.${domain}/${objectKey}`;
     } catch (error) {
-      await this.logAction(`Cloud upload failed key=${objectKey}`, 'error', actor);
+      await this.logAction(`Cloud upload failed key=${objectKey}`, 'error');
       throw error;
     }
   }

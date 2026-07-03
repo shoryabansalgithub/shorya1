@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
-import { Role } from '@prisma/client';
+import { Role, ShopStatus } from '@prisma/client';
 
 export class SafeUserDto {
   @ApiProperty()
@@ -27,9 +27,17 @@ export class SafeUserDto {
   @Expose()
   isActive: boolean;
 
-  @ApiPropertyOptional()
+  @ApiProperty()
   @Expose()
-  shopId: string | null;
+  shopId: string;
+
+  @ApiProperty({ enum: ShopStatus })
+  @Expose()
+  shopStatus: ShopStatus;
+
+  @ApiProperty()
+  @Expose()
+  tokenVersion: number;
 
   @ApiProperty()
   @Expose()

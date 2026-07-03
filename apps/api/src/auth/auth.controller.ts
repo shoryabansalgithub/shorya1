@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Request, UseGuards, Delete, Param, Ip, Headers } from '@nestjs/common';
 import { LocalAuthGuard } from './local-auth.guard';
 import { AuthService, LoginResponseDto } from './auth.service';
 import { Public } from './public.decorator';
@@ -40,6 +40,7 @@ export class AuthController {
       email: body.email,
       password: body.password,
       name: body.name,
+      shopName: body.shopName,
     };
 
     return this.usersService.create(safeBody);
@@ -50,9 +51,22 @@ export class AuthController {
   @UseGuards(LocalAuthGuard)
   @Post('login')
   @ApiOperation({ summary: 'Login with email and password' })
-  @ApiBody({ schema: { type: 'object', properties: { email: { type: 'string' }, password: { type: 'string' } } } })
-  async login(@Request() req: AuthenticatedRequest): Promise<LoginResponseDto> {
-    return this.authService.login(req.user);
+  async login(@Request() req: AuthenticatedRequest, @Ip() ip: string, @Headers('user-agent') userAgent: string): Promise<LoginResponseDto> {
+    return this.authService.login(req.user, ip, userAgent);
+  }
+
+  @Get('sessions')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all active sessions for the current user' })
+  getSessions(@Request() req: AuthenticatedRequest) {
+    return this.authService.getSessions(req.user.id);
+  }
+
+  @Delete('sessions/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Revoke a specific session' })
+  revokeSession(@Request() req: AuthenticatedRequest, @Param('id') sessionId: string) {
+    return this.authService.revokeSession(sessionId, req.user.id);
   }
 
   @Get('profile')

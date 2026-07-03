@@ -6,7 +6,7 @@ export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
   @Get('products')
-  async getProducts(@Request() req: any) {
-    return this.inventoryService.getProducts(req.user.shopId);
+  async getProducts() {
+    return this.inventoryService.getProducts();
   }
 }

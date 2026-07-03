@@ -40,6 +40,7 @@ import {
   StoreInvoiceBodyDto,
   StorePaymentDto,
 } from './dto/storage.dto';
+
 import { StorageService } from './storage.service';
 
 interface AuthenticatedRequest extends ExpressRequest {
@@ -97,134 +98,129 @@ export class StorageController {
   constructor(private readonly storageService: StorageService) {}
 
   @Post('customers')
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.MANAGER)
+  @Roles(Role.OWNER, Role.ADMIN, Role.SUPER_ADMIN, Role.MANAGER)
   async createCustomerFolder(
     @Body() body: CreateCustomerFolderDto,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: any,
   ) {
     const folderPath = await this.storageService.createCustomerFolder(
-      body.name,
-      body.customerId || `CUST-${Date.now()}`,
-      req.user,
+      body.customerId,
     );
 
     if (body.customerData) {
-      await this.storageService.updateCustomerIndex(body.customerData, req.user);
+      await this.storageService.updateCustomerIndex(body.customerData);
     }
 
     return { success: true, path: folderPath };
   }
 
-  @Post('invoices/:customerName/:invoiceId')
-  @Roles(Role.CASHIER, Role.MANAGER, Role.ADMIN, Role.SUPER_ADMIN)
+  @Post('invoices/:customerId/:invoiceId')
+  @Roles(Role.CASHIER, Role.MANAGER, Role.ADMIN, Role.OWNER, Role.SUPER_ADMIN)
   @UseInterceptors(billingUploadInterceptor)
   async storeInvoice(
-    @Param('customerName') customerName: string,
+    @Param('customerId') customerId: string,
     @Param('invoiceId') invoiceId: string,
     @UploadedFiles() files: Express.Multer.File[] | undefined,
     @Body() body: StoreInvoiceBodyDto,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: any,
   ) {
     const pdfFile = assertPdfFile(findFile(files, 'pdf'));
     const thumbnailFile = assertOptionalImageFile(findFile(files, 'thumbnail'));
     const jsonContent = parseJsonObject(body.jsonContent);
 
     await this.storageService.storeInvoice(
-      customerName,
+      customerId,
       invoiceId,
       pdfFile,
       jsonContent,
       thumbnailFile,
-      req.user,
     );
 
     return { success: true };
   }
 
-  @Post('bills/:customerName/:billId')
-  @Roles(Role.CASHIER, Role.MANAGER, Role.ADMIN, Role.SUPER_ADMIN)
+  @Post('bills/:customerId/:billId')
+  @Roles(Role.CASHIER, Role.MANAGER, Role.ADMIN, Role.OWNER, Role.SUPER_ADMIN)
   @UseInterceptors(billingUploadInterceptor)
   async storeCapturedBill(
-    @Param('customerName') customerName: string,
+    @Param('customerId') customerId: string,
     @Param('billId') billId: string,
     @UploadedFiles() files: Express.Multer.File[] | undefined,
     @Body() body: StoreCapturedBillBodyDto,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: any,
   ) {
     const imageFile = assertImageFile(findFile(files, 'image'));
     const pdfFile = assertOptionalPdfFile(findFile(files, 'pdf'));
     const thumbnailFile = assertOptionalImageFile(findFile(files, 'thumbnail'));
 
     await this.storageService.storeCapturedBill(
-      customerName,
+      customerId,
       billId,
       imageFile,
       pdfFile,
       body.ocrText,
       thumbnailFile,
-      req.user,
     );
 
     return { success: true };
   }
 
-  @Post('payments/:customerName')
-  @Roles(Role.CASHIER, Role.MANAGER, Role.ADMIN, Role.SUPER_ADMIN)
+  @Post('payments/:customerId')
+  @Roles(Role.CASHIER, Role.MANAGER, Role.ADMIN, Role.OWNER, Role.SUPER_ADMIN)
   async storePayment(
-    @Param('customerName') customerName: string,
+    @Param('customerId') customerId: string,
     @Body() body: StorePaymentDto,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: any,
   ) {
-    await this.storageService.storePayment(customerName, body.paymentData, req.user);
+    await this.storageService.storePayment(customerId, body.paymentData);
     return { success: true };
   }
 
-  @Post('statements/:customerName')
-  @Roles(Role.CASHIER, Role.MANAGER, Role.ADMIN, Role.SUPER_ADMIN)
+  @Post('statements/:customerId')
+  @Roles(Role.CASHIER, Role.MANAGER, Role.ADMIN, Role.OWNER, Role.SUPER_ADMIN)
   @UseInterceptors(billingUploadInterceptor)
   async storeStatement(
-    @Param('customerName') customerName: string,
+    @Param('customerId') customerId: string,
     @UploadedFiles() files: Express.Multer.File[] | undefined,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: any,
   ) {
     const pdfFile = assertPdfFile(findFile(files, 'pdf'));
-    await this.storageService.storeStatement(customerName, pdfFile, req.user);
+    await this.storageService.storeStatement(customerId, pdfFile);
     return { success: true };
   }
 
-  @Delete('files/:customerName')
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Delete('files/:customerId')
+  @Roles(Role.OWNER, Role.ADMIN, Role.SUPER_ADMIN)
   async deleteFile(
-    @Param('customerName') customerName: string,
+    @Param('customerId') customerId: string,
     @Body() body: DeleteStorageFileDto,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: any,
   ) {
-    return this.storageService.softDeleteFile(customerName, body, req.user);
+    return this.storageService.softDeleteFile(customerId, body);
   }
 
   @Post('backup')
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.OWNER, Role.ADMIN, Role.SUPER_ADMIN)
   async triggerBackup(
     @Body() body: BackupStorageDto,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: any,
   ) {
-    return this.storageService.createBackup(body.type, req.user);
+    return this.storageService.createBackup(body.type);
   }
 
   @Post('cloud/upload')
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.OWNER, Role.ADMIN, Role.SUPER_ADMIN)
   @UseInterceptors(cloudUploadInterceptor)
   async uploadToCloud(
     @UploadedFiles() files: Express.Multer.File[] | undefined,
     @Body() body: CloudUploadDto,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: any,
   ) {
     const file = validateUploadedFile(files?.[0], cloudUploadPolicy);
 
     const url = await this.storageService.uploadFileToCloud(
       file,
       body.folder,
-      req.user,
     );
 
     return { success: true, url };
