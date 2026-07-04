@@ -3,12 +3,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/create-product.dto';
+import { ProductEventPublisher } from '../product-events/services/product-event-publisher.service';
 
 @Injectable()
 export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly eventPublisher: ProductEventPublisher,
   ) {}
 
   async create(createProductDto: CreateProductDto) {
@@ -35,15 +37,25 @@ export class ProductsService {
         }
     }
 
-    const product = await this.prisma.product.create({
-      data: {
-        ...createProductDto,
+    const product = await this.prisma.$transaction(async (tx) => {
+      const newProduct = await tx.product.create({
+        data: {
+          ...createProductDto,
+          shopId,
+        },
+      });
+
+      await this.eventPublisher.publish(tx as any, {
         shopId,
-      },
+        eventType: 'ProductCreated',
+        entityId: newProduct.id,
+        entityType: 'Product',
+        payload: newProduct
+      });
+
+      return newProduct;
     });
 
-    // TODO: Publish ProductCreated event to Outbox
-    
     return product;
   }
 

@@ -1,0 +1,93 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateReservationDto } from '../dto/reservation.dto';
+import { ReservationValidationService } from './reservation-validation.service';
+import { AllocationService } from './allocation.service';
+import { ReservationStatus } from '@prisma/client';
+import { EventPublisherService } from '../../events-domain/services/event-publisher.service';
+
+@Injectable()
+export class ReservationService {
+  private readonly logger = new Logger(ReservationService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly validation: ReservationValidationService,
+    private readonly allocation: AllocationService,
+    private readonly eventPublisher: EventPublisherService
+  ) {}
+
+  /**
+   * Creates a reservation, locking the inventory physically.
+   */
+  async createReservation(shopId: string, dto: CreateReservationDto) {
+    // 1. Pre-flight Validation check (prevent obvious oversells before entering the transaction)
+    for (const item of dto.items) {
+      await this.validation.validateAvailabilityOrThrow(
+        shopId, item.productId, item.variantId || null, item.requestedQuantity
+      );
+    }
+
+    // 2. Open Serializable Transaction
+    return this.prisma.$transaction(async (tx) => {
+      
+      // Calculate Expiry
+      let expiresAt = null;
+      if (dto.expiresInSeconds) {
+        expiresAt = new Date();
+        expiresAt.setSeconds(expiresAt.getSeconds() + dto.expiresInSeconds);
+      }
+
+      // 3. Create Reservation Header
+      const reservation = await tx.stockReservation.create({
+        data: {
+          shopId,
+          source: dto.source,
+          referenceId: dto.referenceId,
+          expiresAt,
+          status: ReservationStatus.ALLOCATED // We are moving straight to fully allocated
+        }
+      });
+
+      // 4. Create Items and Allocate Physically
+      for (const reqItem of dto.items) {
+        const item = await tx.reservationItem.create({
+          data: {
+            shopId,
+            reservationId: reservation.id,
+            productId: reqItem.productId,
+            variantId: reqItem.variantId,
+            requestedQuantity: reqItem.requestedQuantity,
+            allocatedQuantity: reqItem.requestedQuantity
+          }
+        });
+
+        // Run the physical Allocation Strategy (FIFO)
+        await this.allocation.allocateStockFifo(
+          tx, shopId, item.id, item.productId, item.variantId || null, item.requestedQuantity.toNumber()
+        );
+        
+        // Also update the Product.currentStock cache for Epic 2 backward compatibility
+        const product = await tx.product.findUnique({ where: { id: item.productId }});
+        if (product && typeof product.currentStock === 'number') {
+           // We do NOT decrement currentStock here. Current stock means ON HAND. 
+           // We only decrement it when the reservation is FULFILLED.
+        }
+      }
+
+      // Publish Outbox Event
+      await this.eventPublisher.publish(tx, shopId, {
+        type: 'StockReserved',
+        entityType: 'StockReservation',
+        entityId: reservation.id,
+        payload: {
+          reservationId: reservation.id,
+          source: reservation.source,
+          items: dto.items
+        }
+      });
+
+      return reservation;
+    });
+  }
+}

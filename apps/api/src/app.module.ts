@@ -30,8 +30,24 @@ import { ProductsModule } from './products/products.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ProductVersioningModule } from './product-versioning/product-versioning.module';
 import { ProductVariantsModule } from './product-variants/product-variants.module';
+import { ProductIdentityModule } from './product-identity/product-identity.module';
+import { ProductMediaModule } from './product-media/product-media.module';
+import { ProductSearchModule } from './product-search/product-search.module';
+import { ProductValidationModule } from './product-validation/product-validation.module';
+import { ImportExportModule } from './import-export/import-export.module';
+import { ProductEventsModule } from './product-events/product-events.module';
+import { InventoryDomainModule } from './inventory-domain/inventory-domain.module';
+import { WarehouseModule } from './warehouse-domain/warehouse.module';
+import { StockLedgerModule } from './stock-ledger-domain/stock-ledger.module';
+import { ReservationModule } from './reservation-domain/reservation.module';
+import { StockCountModule } from './stock-count-domain/stock-count.module';
+import { BatchModule } from './batch-domain/batch.module';
+import { EventsModule } from './events-domain/events.module';
+import { AnalyticsModule } from './analytics-domain/analytics.module';
+import { ScheduleModule } from '@nestjs/schedule';
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: Joi.object({
@@ -108,6 +124,20 @@ import { ProductVariantsModule } from './product-variants/product-variants.modul
     CategoriesModule,
     ProductVersioningModule,
     ProductVariantsModule,
+    ProductIdentityModule,
+    ProductMediaModule,
+    ProductSearchModule,
+    ProductValidationModule,
+    ImportExportModule,
+    ProductEventsModule,
+    InventoryDomainModule,
+    WarehouseModule,
+    StockLedgerModule,
+    ReservationModule,
+    StockCountModule,
+    BatchModule,
+    EventsModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [

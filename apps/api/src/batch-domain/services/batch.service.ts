@@ -1,0 +1,73 @@
+import { Injectable, Logger, ConflictException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateBatchDto, AddBatchStockDto } from '../dto/batch.dto';
+import { BatchStatus } from '@prisma/client';
+
+@Injectable()
+export class BatchService {
+  private readonly logger = new Logger(BatchService.name);
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Registers a new Batch (Lot) in the system.
+   */
+  async createBatch(shopId: string, dto: CreateBatchDto) {
+    const existing = await this.prisma.batch.findUnique({
+      where: { shopId_batchNumber: { shopId, batchNumber: dto.batchNumber } }
+    });
+
+    if (existing) {
+      throw new ConflictException(`Batch number ${dto.batchNumber} already exists.`);
+    }
+
+    const batch = await this.prisma.batch.create({
+      data: {
+        shopId,
+        productId: dto.productId,
+        variantId: dto.variantId,
+        batchNumber: dto.batchNumber,
+        supplierLotNumber: dto.supplierLotNumber,
+        mfgDate: dto.mfgDate ? new Date(dto.mfgDate) : null,
+        expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
+        type: dto.type,
+        status: BatchStatus.AVAILABLE
+      }
+    });
+
+    this.logger.log(`Created new batch ${batch.batchNumber} for product ${batch.productId}`);
+    return batch;
+  }
+
+  /**
+   * Links a batch to a specific physical InventoryItem (Bin)
+   */
+  async addBatchStock(shopId: string, batchId: string, dto: AddBatchStockDto) {
+    return this.prisma.$transaction(async (tx) => {
+      
+      const batchStock = await tx.batchStock.upsert({
+        where: {
+          batchId_inventoryItemId: {
+            batchId,
+            inventoryItemId: dto.inventoryItemId
+          }
+        },
+        update: {
+          quantity: { increment: dto.quantity }
+        },
+        create: {
+          shopId,
+          batchId,
+          inventoryItemId: dto.inventoryItemId,
+          quantity: dto.quantity
+        }
+      });
+
+      // We DO NOT update `InventoryItem.onHand` here. 
+      // Physical on-hand is managed strictly by the Stock Ledger (Phase 3.2.3).
+      // BatchStock is merely a traceability layer layered ON TOP of the physical bin.
+      
+      return batchStock;
+    });
+  }
+}

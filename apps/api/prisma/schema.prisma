@@ -151,6 +151,33 @@ enum NotificationType {
   SUSPICIOUS_ACTIVITY
 }
 
+enum BarcodeFormat {
+  GS1
+  EAN8
+  EAN13
+  UPCA
+  UPCE
+  CODE39
+  CODE93
+  CODE128
+  ITF
+  ITF14
+  CODABAR
+  MSI
+  PHARMACODE
+  QRCODE
+  DATAMATRIX
+  PDF417
+  AZTEC
+}
+
+enum BarcodeStatus {
+  ACTIVE
+  INACTIVE
+  REVOKED
+  EXPIRED
+}
+
 enum DriftStatus {
   DETECTED
   REPAIRED
@@ -169,6 +196,204 @@ enum LedgerAccount {
 enum LedgerEntryType {
   DEBIT
   CREDIT
+}
+
+enum InventoryStockState {
+  AVAILABLE
+  RESERVED
+  ALLOCATED
+  IN_TRANSIT
+  DAMAGED
+  LOST
+  RETURNED
+  QUARANTINE
+  BLOCKED
+  EXPIRED
+  ADJUSTMENT_PENDING
+  COUNTING
+}
+
+enum AdjustmentReason {
+  MANUAL_COUNT
+  DAMAGE
+  LOSS
+  RETURN
+  CORRECTION
+  OPENING_BALANCE
+  EXPIRY
+  TRANSFER
+  PRODUCTION
+}
+
+enum InventoryAlertType {
+  LOW_STOCK
+  OVERSTOCK
+  NEGATIVE_STOCK
+  EXPIRED
+  REORDER_NEEDED
+  INTEGRITY_VIOLATION
+}
+
+enum WarehouseType {
+  MAIN
+  RETAIL_STORE
+  DARK_STORE
+  DISTRIBUTION_CENTER
+  MANUFACTURING
+  COLD_STORAGE
+  VIRTUAL
+}
+
+enum LocationType {
+  ZONE
+  AISLE
+  RACK
+  SHELF
+  BIN
+  PALLET
+}
+
+enum LocationStatus {
+  ACTIVE
+  MAINTENANCE
+  DAMAGED
+  FULL
+  QUARANTINED
+  INACTIVE
+}
+
+enum BatchType {
+  MANUFACTURING
+  PURCHASE
+  SUPPLIER
+  INTERNAL
+  RETURN
+}
+
+enum AbcClass {
+  A
+  B
+  C
+  UNCLASSIFIED
+}
+
+enum XyzClass {
+  X
+  Y
+  Z
+  UNCLASSIFIED
+}
+
+enum RecommendationType {
+  REORDER
+  LIQUIDATE
+  TRANSFER
+  DISCOUNT
+}
+
+enum BatchStatus {
+  RECEIVED
+  AVAILABLE
+  QUARANTINED
+  EXPIRED
+  RECALLED
+  CONSUMED
+}
+
+enum RecallStatus {
+  ACTIVE
+  RESOLVED
+}
+
+enum CountSessionStatus {
+  CREATED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  UNDER_REVIEW
+  APPROVED
+  POSTED
+  CANCELLED
+}
+
+enum CountType {
+  FULL_COUNT
+  CYCLE_COUNT
+  SPOT_CHECK
+  BIN_COUNT
+  ZONE_COUNT
+}
+
+enum AdjustmentStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  POSTED
+  FAILED
+}
+
+enum ReservationStatus {
+  CREATED
+  PENDING
+  PARTIALLY_RESERVED
+  RESERVED
+  PARTIALLY_ALLOCATED
+  ALLOCATED
+  PICKING
+  PACKING
+  READY_TO_DISPATCH
+  FULFILLED
+  EXPIRED
+  CANCELLED
+  FAILED
+  RELEASED
+  AUTO_RELEASED
+}
+
+enum ReservationSource {
+  SALES_ORDER
+  POS
+  WEBSITE
+  MOBILE_APP
+  MARKETPLACE
+  PURCHASE_RETURN
+  MANUFACTURING
+  WAREHOUSE_TRANSFER
+  API
+  SYSTEM
+}
+
+enum AllocationStatus {
+  PENDING
+  LOCKED
+  RELEASED
+  FULFILLED
+}
+
+enum StockMovementType {
+  PURCHASE
+  SALE
+  SALE_RETURN
+  PURCHASE_RETURN
+  TRANSFER_OUT
+  TRANSFER_IN
+  MANUFACTURING_INPUT
+  MANUFACTURING_OUTPUT
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  OPENING_BALANCE
+  CLOSING_BALANCE
+  RESERVATION
+  RESERVATION_RELEASE
+  DAMAGE
+  LOSS
+  EXPIRY
+  QUARANTINE
+  CONSUMPTION
+  CORRECTION
+  IMPORT
+  EXPORT
+  SYSTEM_CORRECTION
 }
 
 model Shop {
@@ -219,6 +444,65 @@ model Shop {
   productImages        ProductImage[]
   productPriceTiers    ProductPriceTier[]
   productRelationships ProductRelationship[]
+
+  productIdentities ProductIdentity[]
+  variantIdentities VariantIdentity[]
+  packageIdentities PackageIdentity[]
+  barcodes          Barcode[]
+  barcodeHistories  BarcodeHistory[]
+  barcodeTemplates  BarcodeTemplate[]
+  barcodePrintJobs  BarcodePrintJob[]
+  qrCodes           QrCode[]
+  mediaAssets       MediaAsset[]
+  mediaVersions     MediaVersion[]
+  mediaTags         MediaTag[]
+  mediaAudits       MediaAudit[]
+  mediaStorages     MediaStorage[]
+  mediaThumbnails   MediaThumbnail[]
+  mediaReferences   MediaReference[]
+  searchHistories    SearchHistory[]
+  savedSearches      SavedSearch[]
+  searchAnalytics    SearchAnalytics[]
+  searchSynonyms     SearchSynonym[]
+  searchBoosts       SearchBoost[]
+  searchClicks       SearchClick[]
+  searchIndexStatuses SearchIndexStatus[]
+  validationRules    ValidationRule[]
+  duplicateCandidates DuplicateCandidate[]
+  productQualityScores ProductQualityScore[]
+  productValidationIssues ProductValidationIssue[]
+  importJobs         ImportJob[]
+  exportJobs         ExportJob[]
+  importMappings     ImportMapping[]
+  rollbackRecords    RollbackRecord[]
+  productEventLogs   ProductEventLog[]
+  outboxEvents       OutboxEvent[]
+  webhookEndpoints   WebhookEndpoint[]
+  deadLetterEvents   DeadLetterEvent[]
+  inventoryItems     InventoryItem[]
+  inventoryAdjustments InventoryAdjustment[]
+  inventoryMovements InventoryMovement[]
+  inventorySnapshots InventorySnapshot[]
+  inventoryThresholds InventoryThreshold[]
+  inventoryAlerts    InventoryAlert[]
+  warehouses         Warehouse[]
+  locations          Location[]
+  locationCapacityLogs LocationCapacityLog[]
+  stockLedgerEntries StockLedgerEntry[]
+  stockSnapshots     StockSnapshot[]
+  stockReservations  StockReservation[]
+  reservationItems   ReservationItem[]
+  reservationAllocations ReservationAllocation[]
+  stockCountSessions StockCountSession[]
+  stockCountItems    StockCountItem[]
+  adjustmentRequests AdjustmentRequest[]
+  batches            Batch[]
+  batchStocks        BatchStock[]
+  batchRecalls       BatchRecall[]
+  inventoryKpis      InventoryKpi[]
+  inventoryClassifications InventoryClassification[]
+  inventoryRecommendations InventoryRecommendation[]
+  inventoryEventLogs       InventoryEventLog[]
 }
 
 model User {
@@ -248,9 +532,15 @@ model User {
   shiftsOpened      Shift[]            @relation("ShiftOpenedBy")
   shiftsClosed      Shift[]            @relation("ShiftClosedBy")
   invoices          Invoice[]          @relation("InvoiceCashier")
+  barcodeChanges    BarcodeHistory[]
+  printJobs         BarcodePrintJob[]
   udharTransactions UdharTransaction[] @relation("UdharRecordedBy")
   inventoryLogs     InventoryLog[]     @relation("InventoryRecordedBy")
+  mediaAudits       MediaAudit[]
   auditLogs         AuditLog[]         @relation("AuditUser")
+  searchHistories   SearchHistory[]
+  savedSearches     SavedSearch[]
+  searchClicks      SearchClick[]
 
   @@index([shopId])
 }
@@ -411,9 +701,25 @@ model Product {
   attributes      ProductAttribute[]
   tags            ProductTag[]
   priceTiers      ProductPriceTier[]
+  reservationItems ReservationItem[]
+  enterpriseBatches Batch[] @relation("EnterpriseBatches")
   relationsSource ProductRelationship[] @relation("RelationSource")
   relationsTarget ProductRelationship[] @relation("RelationTarget")
   skuHistory      SkuHistory[]
+  inventoryKpis   InventoryKpi[]
+  inventoryClassifications InventoryClassification[]
+  inventoryRecommendations InventoryRecommendation[]
+
+  productIdentity   ProductIdentity?
+  globalBarcodes    Barcode[]
+  packageIdentities PackageIdentity[]
+  qrCodes           QrCode[]
+  mediaReferences   MediaReference[]
+  qualityScore      ProductQualityScore?
+  validationIssues  ProductValidationIssue[]
+  duplicateSources  DuplicateCandidate[] @relation("DuplicateSource")
+  duplicateTargets  DuplicateCandidate[] @relation("DuplicateTarget")
+  inventoryItems    InventoryItem[]
 
   @@unique([shopId, sku, deletedAt])
   @@index([shopId, status])
@@ -788,16 +1094,26 @@ model Notification {
 }
 
 model OutboxEvent {
-  id          String    @id @default(cuid())
-  type        String
-  payload     Json
-  status      String    @default("PENDING") // PENDING, DONE, FAILED
-  error       String?
-  retryCount  Int       @default(0)
-  createdAt   DateTime  @default(now())
-  processedAt DateTime?
+  id            String    @id @default(cuid())
+  shopId        String
+  tenantId      String?   // For multi-tenant platform isolation
+  type          String
+  payload       Json
+  correlationId String?
+  causationId   String?
+  actorId       String?
+  entityId      String?
+  entityType    String?
+  status        String    @default("PENDING") // PENDING, DONE, FAILED
+  error         String?
+  retryCount    Int       @default(0)
+  createdAt     DateTime  @default(now())
+  processedAt   DateTime?
+
+  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
+  @@index([shopId, status])
 }
 
 model LedgerTransaction {
@@ -1007,6 +1323,12 @@ model ProductVariant {
   shop       Shop                      @relation(fields: [shopId], references: [id])
   attributes ProductVariantAttribute[]
 
+  variantIdentity   VariantIdentity?
+  globalBarcodes    Barcode[]
+  packageIdentities PackageIdentity[]
+  qrCodes           QrCode[]
+  mediaReferences   MediaReference[]
+
   @@unique([shopId, sku, isDeleted])
   @@index([productId])
   @@index([shopId])
@@ -1154,4 +1476,1273 @@ model ShopSettings {
   updatedAt        DateTime @updatedAt
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+model ProductIdentity {
+  id                String   @id @default(cuid())
+  shopId            String
+  productId         String   @unique
+  globalProductId   String?  @unique
+  internalProductId String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  shop    Shop    @relation(fields: [shopId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+}
+
+model VariantIdentity {
+  id        String   @id @default(cuid())
+  shopId    String
+  variantId String   @unique
+  sku       String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop    Shop           @relation(fields: [shopId], references: [id])
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+}
+
+model PackageIdentity {
+  id          String   @id @default(cuid())
+  shopId      String
+  productId   String?
+  variantId   String?
+  packageType String
+  quantity    Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  shop     Shop            @relation(fields: [shopId], references: [id])
+  product  Product?        @relation(fields: [productId], references: [id])
+  variant  ProductVariant? @relation(fields: [variantId], references: [id])
+  barcodes Barcode[]
+}
+
+model Barcode {
+  id     String        @id @default(cuid())
+  shopId String
+  code   String
+  format BarcodeFormat
+  status BarcodeStatus @default(ACTIVE)
+
+  productId String?
+  variantId String?
+  packageId String?
+
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop    Shop             @relation(fields: [shopId], references: [id])
+  product Product?         @relation(fields: [productId], references: [id])
+  variant ProductVariant?  @relation(fields: [variantId], references: [id])
+  package PackageIdentity? @relation(fields: [packageId], references: [id])
+  history BarcodeHistory[]
+
+  @@unique([shopId, code])
+  @@index([productId])
+  @@index([variantId])
+}
+
+model BarcodeHistory {
+  id          String   @id @default(cuid())
+  shopId      String
+  barcodeId   String
+  oldCode     String?
+  newCode     String
+  reason      String
+  changedById String
+  createdAt   DateTime @default(now())
+
+  shop      Shop    @relation(fields: [shopId], references: [id])
+  barcode   Barcode @relation(fields: [barcodeId], references: [id])
+  changedBy User    @relation(fields: [changedById], references: [id])
+}
+
+model BarcodeTemplate {
+  id        String   @id @default(cuid())
+  shopId    String
+  name      String
+  type      String
+  content   String   @db.Text
+  width     Decimal  @db.Decimal(10, 2)
+  height    Decimal  @db.Decimal(10, 2)
+  unit      String   @default("mm")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop      Shop              @relation(fields: [shopId], references: [id])
+  printJobs BarcodePrintJob[]
+}
+
+model BarcodePrintJob {
+  id            String    @id @default(cuid())
+  shopId        String
+  templateId    String
+  printerId     String?
+  status        String
+  quantity      Int
+  requestedById String
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  shop        Shop            @relation(fields: [shopId], references: [id])
+  template    BarcodeTemplate @relation(fields: [templateId], references: [id])
+  requestedBy User            @relation(fields: [requestedById], references: [id])
+}
+
+model QrCode {
+  id      String @id @default(cuid())
+  shopId  String
+  code    String @unique
+  payload String @db.Text
+  type    String
+
+  productId String?
+  variantId String?
+
+  createdAt DateTime @default(now())
+
+  shop    Shop            @relation(fields: [shopId], references: [id])
+  product Product?        @relation(fields: [productId], references: [id])
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+  MODEL3D
+}
+
+enum MediaStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+model MediaAsset {
+  id           String      @id @default(cuid())
+  shopId       String
+  hash         String // SHA-256 for deduplication
+  mimeType     String
+  extension    String
+  sizeBytes    Int
+  originalName String
+  status       MediaStatus @default(PUBLISHED)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  isDeleted    Boolean     @default(false)
+
+  shop       Shop             @relation(fields: [shopId], references: [id])
+  metadata   MediaMetadata?
+  storage    MediaStorage?
+  versions   MediaVersion[]
+  references MediaReference[]
+  thumbanils MediaThumbnail[]
+  audits     MediaAudit[]
+  tags       MediaTag[]       @relation("AssetTags")
+
+  @@unique([shopId, hash]) // Deduplication constraint
+}
+
+model MediaMetadata {
+  id          String @id @default(cuid())
+  assetId     String @unique
+  width       Int?
+  height      Int?
+  durationSec Int?
+  exifData    Json?
+
+  asset MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+}
+
+model MediaStorage {
+  id       String  @id @default(cuid())
+  shopId   String
+  assetId  String  @unique
+  provider String // LOCAL, S3, R2
+  bucket   String?
+  path     String
+  cdnUrl   String?
+
+  shop  Shop       @relation(fields: [shopId], references: [id])
+  asset MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+}
+
+model MediaThumbnail {
+  id       String  @id @default(cuid())
+  shopId   String
+  assetId  String
+  sizeKey  String // 100px, 300px, 600px
+  path     String
+  cdnUrl   String?
+  width    Int
+  height   Int
+  mimeType String
+
+  shop  Shop       @relation(fields: [shopId], references: [id])
+  asset MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, sizeKey])
+}
+
+model MediaVersion {
+  id        String   @id @default(cuid())
+  shopId    String
+  assetId   String
+  version   Int
+  path      String
+  createdAt DateTime @default(now())
+
+  shop  Shop       @relation(fields: [shopId], references: [id])
+  asset MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+}
+
+model MediaReference {
+  id         String  @id @default(cuid())
+  shopId     String
+  assetId    String
+  productId  String?
+  variantId  String?
+  categoryId String?
+  brandId    String?
+
+  isPrimary Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  shop    Shop            @relation(fields: [shopId], references: [id])
+  asset   MediaAsset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  product Product?        @relation(fields: [productId], references: [id])
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
+  // category    Category?  @relation(fields: [categoryId], references: [id])
+  // brand       Brand?     @relation(fields: [brandId], references: [id])
+
+  @@index([productId])
+  @@index([variantId])
+}
+
+model MediaTag {
+  id     String @id @default(cuid())
+  shopId String
+  name   String // e.g. Hero, Packaging, Manual
+
+  shop   Shop         @relation(fields: [shopId], references: [id])
+  assets MediaAsset[] @relation("AssetTags")
+
+  @@unique([shopId, name])
+}
+
+model MediaAudit {
+  id        String   @id @default(cuid())
+  shopId    String
+  assetId   String
+  userId    String
+  action    String // UPLOAD, COMPRESS, TAG, DELETE
+  timestamp DateTime @default(now())
+
+  shop  Shop       @relation(fields: [shopId], references: [id])
+  asset MediaAsset @relation(fields: [assetId], references: [id])
+  user  User       @relation(fields: [userId], references: [id])
+}
+
+enum SearchEntityType {
+  PRODUCT
+  VARIANT
+  CATEGORY
+  BRAND
+}
+
+enum IndexStatus {
+  PENDING
+  INDEXING
+  COMPLETED
+  FAILED
+}
+
+model SearchHistory {
+  id        String   @id @default(cuid())
+  shopId    String
+  userId    String?
+  query     String
+  resultCount Int
+  durationMs Int
+  createdAt DateTime @default(now())
+
+  shop      Shop     @relation(fields: [shopId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([shopId, query])
+}
+
+model SavedSearch {
+  id        String   @id @default(cuid())
+  shopId    String
+  userId    String
+  name      String
+  query     String
+  filters   Json?
+  createdAt DateTime @default(now())
+
+  shop      Shop     @relation(fields: [shopId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model SearchSynonym {
+  id        String   @id @default(cuid())
+  shopId    String
+  term      String
+  synonyms  String   // Comma separated list of synonyms
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  shop      Shop     @relation(fields: [shopId], references: [id])
+
+  @@unique([shopId, term])
+}
+
+model SearchBoost {
+  id        String   @id @default(cuid())
+  shopId    String
+  queryTerm String
+  entityId  String   // e.g. Product ID
+  entityType SearchEntityType
+  score     Float    @default(1.0)
+  createdAt DateTime @default(now())
+
+  shop      Shop     @relation(fields: [shopId], references: [id])
+
+  @@unique([shopId, queryTerm, entityId])
+}
+
+model SearchAnalytics {
+  id           String   @id @default(cuid())
+  shopId       String
+  query        String
+  searchCount  Int      @default(1)
+  clickCount   Int      @default(0)
+  zeroResults  Int      @default(0)
+  date         DateTime @db.Date
+
+  shop      Shop     @relation(fields: [shopId], references: [id])
+
+  @@unique([shopId, query, date])
+}
+
+model SearchClick {
+  id        String   @id @default(cuid())
+  shopId    String
+  userId    String?
+  query     String
+  entityId  String
+  entityType SearchEntityType
+  position  Int
+  createdAt DateTime @default(now())
+
+  shop      Shop     @relation(fields: [shopId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
+}
+
+model SearchIndexStatus {
+  id        String   @id @default(cuid())
+  shopId    String
+  entityType SearchEntityType
+  status    IndexStatus @default(PENDING)
+  lastRun   DateTime?
+  durationMs Int?
+  error     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop      Shop     @relation(fields: [shopId], references: [id])
+
+  @@unique([shopId, entityType])
+}
+
+enum ValidationSeverity {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+  BLOCKING
+}
+
+model ProductQualityScore {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  shopId    String
+  score     Int      @default(0) // 0-100
+  missingFields Json?
+  suggestions   Json?
+  calculatedAt DateTime @default(now())
+  
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shop      Shop     @relation(fields: [shopId], references: [id])
+}
+
+model ProductValidationIssue {
+  id        String   @id @default(cuid())
+  productId String
+  shopId    String
+  stage     String   // e.g. "PRICING", "MEDIA", "SEO"
+  field     String?  // e.g. "sellingPrice"
+  message   String
+  severity  ValidationSeverity @default(WARNING)
+  createdAt DateTime @default(now())
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shop      Shop     @relation(fields: [shopId], references: [id])
+
+  @@index([productId])
+}
+
+model ValidationRule {
+  id          String   @id @default(cuid())
+  shopId      String
+  ruleKey     String   // e.g. "PRICE_GREATER_THAN_MRP"
+  description String
+  isEnabled   Boolean  @default(true)
+  severity    ValidationSeverity @default(ERROR)
+  config      Json?    // Optional thresholds/limits
+  
+  shop        Shop     @relation(fields: [shopId], references: [id])
+
+  @@unique([shopId, ruleKey])
+}
+
+model DuplicateCandidate {
+  id          String   @id @default(cuid())
+  shopId      String
+  sourceId    String
+  targetId    String
+  score       Float    // e.g. 0.95 for 95% match
+  reasons     Json?    // Why it was flagged (e.g. name similarity, same SKU)
+  status      String   @default("PENDING") // PENDING, RESOLVED, IGNORED
+  createdAt   DateTime @default(now())
+
+  shop        Shop     @relation(fields: [shopId], references: [id])
+  source      Product  @relation("DuplicateSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target      Product  @relation("DuplicateTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, sourceId, targetId])
+  @@index([sourceId])
+}
+
+enum JobStatus {
+  PENDING
+  VALIDATING
+  PROCESSING
+  COMPLETED
+  PARTIAL_SUCCESS
+  FAILED
+  CANCELLED
+  ROLLING_BACK
+  ROLLED_BACK
+}
+
+enum ImportMode {
+  CREATE_ONLY
+  UPDATE_ONLY
+  UPSERT
+  MERGE
+  REPLACE
+}
+
+model ImportJob {
+  id              String      @id @default(cuid())
+  shopId          String
+  fileName        String
+  fileSize        Int
+  fileUrl         String      // Local or S3 path
+  format          String      // CSV, XLSX, JSON, XML
+  mode            ImportMode  @default(UPSERT)
+  status          JobStatus   @default(PENDING)
+  
+  totalRows       Int         @default(0)
+  validRows       Int         @default(0)
+  errorRows       Int         @default(0)
+  createdCount    Int         @default(0)
+  updatedCount    Int         @default(0)
+  skippedCount    Int         @default(0)
+
+  errorReportUrl  String?
+  mappingId       String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  shop            Shop        @relation(fields: [shopId], references: [id])
+  mapping         ImportMapping? @relation(fields: [mappingId], references: [id])
+  rows            ImportJobRow[]
+}
+
+model ImportJobRow {
+  id              String      @id @default(cuid())
+  importJobId     String
+  rowNumber       Int
+  rawData         Json        // The raw parsed row
+  status          String      @default("PENDING") // PENDING, SUCCESS, ERROR
+  errors          Json?       // Validation errors for this row
+  actionTaken     String?     // CREATED, UPDATED, SKIPPED
+  createdAt       DateTime    @default(now())
+
+  importJob       ImportJob   @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  @@index([importJobId, status])
+}
+
+model ImportMapping {
+  id              String      @id @default(cuid())
+  shopId          String
+  name            String
+  mappingConfig   Json        // e.g. { "Product Name": "name", "Selling Price": "variants.0.sellingPrice" }
+  isDefault       Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  shop            Shop        @relation(fields: [shopId], references: [id])
+  jobs            ImportJob[]
+}
+
+model ExportJob {
+  id              String      @id @default(cuid())
+  shopId          String
+  format          String      // CSV, XLSX, JSON, XML
+  status          JobStatus   @default(PENDING)
+  filters         Json?       // e.g. { categoryId: "123" }
+  exportedCount   Int         @default(0)
+  fileUrl         String?
+  error           String?     @db.Text
+  
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  shop            Shop        @relation(fields: [shopId], references: [id])
+}
+
+model RollbackRecord {
+  id              String      @id @default(cuid())
+  shopId          String
+  entityId        String
+  entityType      String      // PRODUCT, VARIANT, etc
+  action          String      // IMPORT_UPDATE, IMPORT_CREATE
+  jobId           String
+  previousData    Json?       // The snapshot before update
+  createdAt       DateTime    @default(now())
+
+  shop            Shop        @relation(fields: [shopId], references: [id])
+  
+  @@index([shopId, jobId])
+}
+
+model ProductEventLog {
+  id            String    @id @default(cuid())
+  shopId        String
+  tenantId      String?
+  eventId       String    @unique
+  eventType     String
+  eventVersion  String    @default("v1")
+  entityId      String?
+  entityType    String?
+  timestamp     DateTime  @default(now())
+  correlationId String?
+  causationId   String?
+  actorId       String?
+  payload       Json
+  metadata      Json?
+
+  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, eventType])
+  @@index([entityId, entityType])
+}
+
+model WebhookEndpoint {
+  id            String    @id @default(cuid())
+  shopId        String
+  url           String
+  secret        String    // Used for HMAC signature
+  events        Json      // Array of event types (e.g. ["ProductCreated", "PriceChanged"])
+  isActive      Boolean   @default(true)
+  description   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  deliveries    WebhookDelivery[]
+
+  @@index([shopId, isActive])
+}
+
+model WebhookDelivery {
+  id            String    @id @default(cuid())
+  endpointId    String
+  eventId       String
+  eventType     String
+  payload       Json
+  status        String    // SUCCESS, FAILED
+  statusCode    Int?
+  errorMessage  String?   @db.Text
+  latencyMs     Int?
+  createdAt     DateTime  @default(now())
+
+  endpoint      WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId, status])
+}
+
+model DeadLetterEvent {
+  id            String    @id @default(cuid())
+  shopId        String
+  eventId       String
+  eventType     String
+  payload       Json
+  failureReason String?   @db.Text
+  retryCount    Int       @default(0)
+  sourceQueue   String?   // e.g. "webhook-delivery" or "internal-event-router"
+  status        String    @default("PENDING") // PENDING, RESOLVED, IGNORED
+  createdAt     DateTime  @default(now())
+
+  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, status])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 3.2.1: ENTERPRISE INVENTORY DOMAIN
+// -----------------------------------------------------------------------------
+
+model InventoryItem {
+  id               String              @id @default(cuid())
+  shopId           String
+  productId        String
+  variantId        String?
+  locationId       String              @default("DEFAULT")
+
+  onHand           Decimal             @default(0) @db.Decimal(12, 3)
+  reserved         Decimal             @default(0) @db.Decimal(12, 3)
+  allocated        Decimal             @default(0) @db.Decimal(12, 3)
+  damaged          Decimal             @default(0) @db.Decimal(12, 3)
+  lost             Decimal             @default(0) @db.Decimal(12, 3)
+  inTransit        Decimal             @default(0) @db.Decimal(12, 3)
+
+  reorderPoint     Decimal             @default(10) @db.Decimal(12, 3)
+  reorderQty       Decimal             @default(50) @db.Decimal(12, 3)
+  safetyStock      Decimal             @default(0) @db.Decimal(12, 3)
+  maxStock         Decimal             @default(99999) @db.Decimal(12, 3)
+  minStock         Decimal             @default(0) @db.Decimal(12, 3)
+
+  isNegativeAllowed Boolean            @default(false)
+  status           InventoryStockState @default(AVAILABLE)
+  version          Int                 @default(0)
+
+  lastCountedAt    DateTime?
+  lastAdjustedAt   DateTime?
+  createdBy        String?
+  updatedBy        String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  isDeleted        Boolean             @default(false)
+  deletedAt        DateTime?
+
+  shop             Shop                @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  product          Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
+  location         Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  adjustments      InventoryAdjustment[]
+  movements        InventoryMovement[]
+  stockLedgerEntries StockLedgerEntry[]
+  stockSnapshots     StockSnapshot[]
+  snapshots        InventorySnapshot[]
+  thresholds       InventoryThreshold[]
+  alerts           InventoryAlert[]
+  reservationAllocations ReservationAllocation[]
+  stockCountItems    StockCountItem[]
+  adjustmentRequests AdjustmentRequest[]
+  batchStocks        BatchStock[]
+
+  @@unique([shopId, productId, variantId, locationId])
+  @@index([shopId, status])
+  @@index([productId])
+  @@index([shopId, locationId])
+}
+
+model InventoryAdjustment {
+  id               String           @id @default(cuid())
+  shopId           String
+  inventoryItemId  String
+  reason           AdjustmentReason
+  quantityBefore   Decimal          @db.Decimal(12, 3)
+  quantityChange   Decimal          @db.Decimal(12, 3)
+  quantityAfter    Decimal          @db.Decimal(12, 3)
+  notes            String?          @db.Text
+  correlationId    String?
+  causationId      String?
+  createdBy        String
+  createdAt        DateTime         @default(now())
+
+  shop             Shop             @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  inventoryItem    InventoryItem    @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@index([inventoryItemId, createdAt])
+  @@index([shopId, reason])
+  @@index([correlationId])
+}
+
+model InventoryMovement {
+  id               String              @id @default(cuid())
+  shopId           String
+  inventoryItemId  String
+  fromState        InventoryStockState
+  toState          InventoryStockState
+  quantity         Decimal             @db.Decimal(12, 3)
+  referenceType    String              // SALE, PURCHASE, TRANSFER, ADJUSTMENT, RETURN
+  referenceId      String?
+  correlationId    String?
+  causationId      String?
+  notes            String?             @db.Text
+  createdBy        String?
+  createdAt        DateTime            @default(now())
+
+  shop             Shop                @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  inventoryItem    InventoryItem       @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@index([inventoryItemId, createdAt])
+  @@index([shopId, referenceType])
+  @@index([correlationId])
+}
+
+model InventorySnapshot {
+  id               String        @id @default(cuid())
+  shopId           String
+  inventoryItemId  String
+  onHand           Decimal       @db.Decimal(12, 3)
+  reserved         Decimal       @db.Decimal(12, 3)
+  allocated        Decimal       @db.Decimal(12, 3)
+  damaged          Decimal       @db.Decimal(12, 3)
+  lost             Decimal       @db.Decimal(12, 3)
+  inTransit        Decimal       @db.Decimal(12, 3)
+  snapshotReason   String?       // SCHEDULED, MANUAL, AUDIT
+  createdBy        String?
+  createdAt        DateTime      @default(now())
+
+  shop             Shop          @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  inventoryItem    InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@index([inventoryItemId, createdAt])
+  @@index([shopId, createdAt])
+}
+
+model InventoryThreshold {
+  id               String        @id @default(cuid())
+  shopId           String
+  inventoryItemId  String
+  alertType        InventoryAlertType
+  thresholdValue   Decimal       @db.Decimal(12, 3)
+  isActive         Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  shop             Shop          @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  inventoryItem    InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@index([inventoryItemId])
+  @@index([shopId, alertType])
+}
+
+model InventoryAlert {
+  id               String             @id @default(cuid())
+  shopId           String
+  inventoryItemId  String
+  alertType        InventoryAlertType
+  message          String
+  currentValue     Decimal            @db.Decimal(12, 3)
+  thresholdValue   Decimal?           @db.Decimal(12, 3)
+  isResolved       Boolean            @default(false)
+  resolvedAt       DateTime?
+  resolvedBy       String?
+  createdAt        DateTime           @default(now())
+
+  shop             Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  inventoryItem    InventoryItem      @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@index([shopId, isResolved])
+  @@index([inventoryItemId, alertType])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 3.2.2: ENTERPRISE WAREHOUSE MANAGEMENT
+// -----------------------------------------------------------------------------
+
+model Warehouse {
+  id               String            @id @default(cuid())
+  shopId           String
+  code             String
+  name             String
+  type             WarehouseType     @default(MAIN)
+  
+  // Physical constraints
+  maxWeightKg      Decimal?          @db.Decimal(12, 3)
+  maxVolumeM3      Decimal?          @db.Decimal(12, 3)
+  maxSkuCount      Int?
+  
+  address          String?           @db.Text
+  city             String?
+  state            String?
+  pincode          String?
+  country          String?
+  contactName      String?
+  contactPhone     String?
+
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  isDeleted        Boolean           @default(false)
+  deletedAt        DateTime?
+
+  shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  locations        Location[]
+
+  @@unique([shopId, code, deletedAt])
+  @@index([shopId, isActive])
+  @@index([type])
+}
+
+model Location {
+  id               String            @id @default(cuid())
+  shopId           String
+  warehouseId      String
+  parentId         String?
+  type             LocationType
+  code             String
+  path             String            // Materialized Path: /WH1/Z1/A3/R2/S1/B4
+  depth            Int               @default(0)
+  
+  status           LocationStatus    @default(ACTIVE)
+
+  // Physical constraints
+  maxWeightKg      Decimal?          @db.Decimal(12, 3)
+  maxVolumeM3      Decimal?          @db.Decimal(12, 3)
+  
+  // Current occupancy (calculated via BullMQ asynchronously or sync on events)
+  currentWeightKg  Decimal           @default(0) @db.Decimal(12, 3)
+  currentVolumeM3  Decimal           @default(0) @db.Decimal(12, 3)
+  
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  isDeleted        Boolean           @default(false)
+  deletedAt        DateTime?
+
+  shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  warehouse        Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  
+  // Hierarchical relations
+  parent           Location?         @relation("LocationHierarchy", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children         Location[]        @relation("LocationHierarchy")
+  
+  inventoryItems   InventoryItem[]
+  capacityLogs     LocationCapacityLog[]
+
+  @@unique([shopId, warehouseId, code, deletedAt])
+  @@index([shopId, warehouseId])
+  @@index([parentId])
+  @@index([shopId, path]) // Critical for fast prefix querying (LIKE '/WH1/Z1/%')
+  @@index([shopId, type])
+}
+
+model LocationCapacityLog {
+  id               String            @id @default(cuid())
+  shopId           String
+  locationId       String
+  oldWeightKg      Decimal           @db.Decimal(12, 3)
+  newWeightKg      Decimal           @db.Decimal(12, 3)
+  oldVolumeM3      Decimal           @db.Decimal(12, 3)
+  newVolumeM3      Decimal           @db.Decimal(12, 3)
+  reason           String?
+  createdAt        DateTime          @default(now())
+
+  shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  location         Location          @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  @@index([locationId, createdAt])
+  @@index([shopId])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 3.2.3: ENTERPRISE STOCK LEDGER ENGINE
+// -----------------------------------------------------------------------------
+
+model StockLedgerEntry {
+  id               String            @id @default(cuid())
+  shopId           String
+  inventoryItemId  String
+  
+  movementType     StockMovementType
+  quantity         Decimal           @db.Decimal(12, 3) // Positive for IN, Negative for OUT
+  unitCost         Decimal?          @db.Decimal(12, 2) // Optional financial valuation
+  
+  referenceType    String?           // e.g., 'INVOICE', 'PO', 'ADJUSTMENT', 'TRANSFER'
+  referenceId      String?
+  documentId       String?
+  correlationId    String?           // Ties multiple entries into a single double-entry transaction
+
+  balanceAfter     Decimal           @db.Decimal(12, 3) // Immutable snapshot of balance after this movement
+  
+  createdBy        String?
+  createdAt        DateTime          @default(now())
+
+  shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  inventoryItem    InventoryItem     @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  // This index is extremely critical for Ledger summation queries and time-travel
+  @@index([shopId, inventoryItemId, createdAt])
+  @@index([referenceType, referenceId])
+  @@index([correlationId])
+}
+
+model StockSnapshot {
+  id               String            @id @default(cuid())
+  shopId           String
+  inventoryItemId  String
+  
+  periodEnd        DateTime          // The exact time this snapshot represents
+  openingBalance   Decimal           @db.Decimal(12, 3)
+  netChange        Decimal           @db.Decimal(12, 3)
+  closingBalance   Decimal           @db.Decimal(12, 3)
+  
+  createdAt        DateTime          @default(now())
+
+  shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  inventoryItem    InventoryItem     @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@unique([shopId, inventoryItemId, periodEnd])
+  @@index([shopId, periodEnd])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 3.2.4: ENTERPRISE STOCK RESERVATION & ALLOCATION ENGINE
+// -----------------------------------------------------------------------------
+
+model StockReservation {
+  id               String            @id @default(cuid())
+  shopId           String
+  
+  source           ReservationSource @default(SYSTEM)
+  referenceId      String?           // e.g., Sales Order ID, POS Cart ID
+  
+  status           ReservationStatus @default(CREATED)
+  
+  expiresAt        DateTime?         // Automatic release deadline
+  releasedAt       DateTime?
+  
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  items            ReservationItem[]
+
+  @@index([shopId, status])
+  @@index([expiresAt, status]) // Critical for the sweeping job
+  @@index([referenceId])
+}
+
+model ReservationItem {
+  id               String            @id @default(cuid())
+  shopId           String
+  reservationId    String
+  
+  productId        String
+  variantId        String?
+  
+  requestedQuantity Decimal          @db.Decimal(12, 3)
+  allocatedQuantity Decimal          @default(0) @db.Decimal(12, 3)
+  
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  reservation      StockReservation  @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  
+  allocations      ReservationAllocation[]
+
+  @@index([reservationId])
+  @@index([productId, variantId])
+}
+
+model ReservationAllocation {
+  id               String            @id @default(cuid())
+  shopId           String
+  reservationItemId String
+  inventoryItemId  String
+  
+  allocatedQuantity Decimal          @db.Decimal(12, 3)
+  status           AllocationStatus  @default(LOCKED)
+  
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  reservationItem  ReservationItem   @relation(fields: [reservationItemId], references: [id], onDelete: Cascade)
+  inventoryItem    InventoryItem     @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@index([reservationItemId])
+  @@index([inventoryItemId])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 3.2.5: ENTERPRISE INVENTORY ADJUSTMENT & STOCK COUNT ENGINE
+// -----------------------------------------------------------------------------
+
+model StockCountSession {
+  id               String            @id @default(cuid())
+  shopId           String
+  warehouseId      String?           // Optional if count spans multiple warehouses
+  
+  type             CountType         @default(CYCLE_COUNT)
+  status           CountSessionStatus @default(CREATED)
+  
+  assignedToUserId String?
+  
+  scheduledFor     DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  items            StockCountItem[]
+
+  @@index([shopId, status])
+  @@index([assignedToUserId])
+}
+
+model StockCountItem {
+  id               String            @id @default(cuid())
+  shopId           String
+  sessionId        String
+  inventoryItemId  String
+  
+  // Snapshotted at the exact moment the count begins to prevent variance skew if operations continue
+  expectedQuantity Decimal           @db.Decimal(12, 3) 
+  
+  countedQuantity  Decimal?          @db.Decimal(12, 3)
+  variance         Decimal?          @db.Decimal(12, 3) // countedQuantity - expectedQuantity
+  
+  notes            String?           @db.Text
+  
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  session          StockCountSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  inventoryItem    InventoryItem     @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  adjustmentRequests AdjustmentRequest[]
+
+  @@index([sessionId])
+  @@index([inventoryItemId])
+}
+
+model AdjustmentRequest {
+  id               String            @id @default(cuid())
+  shopId           String
+  inventoryItemId  String
+  countItemId      String?           // Optional link back to the exact count item that found the variance
+  
+  reason           AdjustmentReason  @default(MANUAL_COUNT)
+  requestedQuantityDelta Decimal     @db.Decimal(12, 3) // +5 or -2
+  
+  status           AdjustmentStatus  @default(PENDING_APPROVAL)
+  
+  requestedById    String?
+  approvedById     String?
+  approvedAt       DateTime?
+  
+  ledgerEntryId    String?           // Populated after posting to the Stock Ledger
+  
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  inventoryItem    InventoryItem     @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  countItem        StockCountItem?   @relation(fields: [countItemId], references: [id], onDelete: SetNull)
+
+  @@index([shopId, status])
+  @@index([inventoryItemId])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 3.2.6: ENTERPRISE BATCH, LOT & EXPIRY MANAGEMENT ENGINE
+// -----------------------------------------------------------------------------
+
+model Batch {
+  id                String            @id @default(cuid())
+  shopId            String
+  
+  productId         String
+  variantId         String?
+  
+  batchNumber       String            // Internal batch number
+  supplierLotNumber String?           // Original manufacturer lot number
+  
+  mfgDate           DateTime?         // Manufacturing Date
+  expiryDate        DateTime?         // Expiry / Best Before Date
+  
+  type              BatchType         @default(PURCHASE)
+  status            BatchStatus       @default(AVAILABLE)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  shop              Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  product           Product           @relation(fields: [productId], references: [id], onDelete: Restrict, name: "EnterpriseBatches")
+  
+  batchStocks       BatchStock[]
+  recalls           BatchRecall[]
+
+  @@unique([shopId, batchNumber])
+  @@index([shopId, status])
+  @@index([expiryDate, status])       // Extremely critical for FEFO allocation & expiry sweeping
+  @@index([productId, variantId])
+}
+
+model BatchStock {
+  id                String            @id @default(cuid())
+  shopId            String
+  batchId           String
+  inventoryItemId   String            // The physical bin where this batch resides
+  
+  quantity          Decimal           @db.Decimal(12, 3) // Actual amount of THIS batch in THIS bin
+  reservedQuantity  Decimal           @default(0) @db.Decimal(12, 3)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  shop              Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  batch             Batch             @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  inventoryItem     InventoryItem     @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@unique([batchId, inventoryItemId])
+  @@index([inventoryItemId])
+}
+
+model BatchRecall {
+  id                String            @id @default(cuid())
+  shopId            String
+  batchId           String
+  
+  reason            String            @db.Text
+  status            RecallStatus      @default(ACTIVE)
+  
+  initiatedById     String?
+  initiatedAt       DateTime          @default(now())
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  shop              Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  batch             Batch             @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  @@index([shopId, status])
+  @@index([batchId])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 3.2.8: ENTERPRISE INVENTORY ANALYTICS & INTELLIGENCE PLATFORM (CQRS)
+// -----------------------------------------------------------------------------
+
+model InventoryKpi {
+  id                 String     @id @default(cuid())
+  shopId             String
+  productId          String
+  date               DateTime   @db.Date // The date this KPI represents
+  
+  totalValue         Decimal    @db.Decimal(15, 4) // Financial value of stock
+  turnoverRate       Decimal    @default(0) @db.Decimal(10, 4) // Sales / Avg Inventory
+  daysOfInventory    Decimal    @default(0) @db.Decimal(10, 2) // How long stock will last
+  stockoutRiskScore  Decimal    @default(0) @db.Decimal(5, 2)  // 0-100 risk score
+  
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  shop               Shop       @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  product            Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, productId, date])
+  @@index([shopId, date])
+}
+
+model InventoryClassification {
+  id                 String     @id @default(cuid())
+  shopId             String
+  productId          String
+  
+  abcClass           AbcClass   @default(UNCLASSIFIED) // Value based
+  xyzClass           XyzClass   @default(UNCLASSIFIED) // Volatility based
+  
+  calculatedAt       DateTime   @default(now())
+
+  shop               Shop       @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  product            Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, productId])
+  @@index([shopId, abcClass, xyzClass])
+}
+
+model InventoryRecommendation {
+  id                 String             @id @default(cuid())
+  shopId             String
+  productId          String
+  
+  type               RecommendationType
+  score              Decimal            @db.Decimal(5, 2) // 0-100 confidence score
+  reason             String             @db.Text
+  actionData         Json?              // e.g. { "suggestedQuantity": 50 }
+  
+  status             String             @default("ACTIVE") // ACTIVE, DISMISSED, ACTIONED
+  
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  shop               Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  product            Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, status])
+  @@index([shopId, type])
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 3.2.9: ENTERPRISE EVENT DRIVEN ARCHITECTURE
+// -----------------------------------------------------------------------------
+
+model IdempotencyRecord {
+  id               String   @id @default(cuid())
+  eventId          String   // The ID of the OutboxEvent or incoming webhook
+  consumerId       String   // e.g., 'InventoryProjectionWorker' or 'WebhookDispatcher'
+  status           String   @default("PROCESSED")
+  createdAt        DateTime @default(now())
+
+  @@unique([eventId, consumerId])
+}
+
+model InventoryEventLog {
+  id               String   @id @default(cuid())
+  shopId           String
+  eventType        String
+  aggregateType    String
+  aggregateId      String
+  payload          Json
+  version          String   @default("v1")
+  publishedAt      DateTime @default(now())
+
+  shop             Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, eventType])
+  @@index([aggregateId])
 }
