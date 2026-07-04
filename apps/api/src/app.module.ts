@@ -45,6 +45,15 @@ import { BatchModule } from './batch-domain/batch.module';
 import { EventsModule } from './events-domain/events.module';
 import { AnalyticsModule } from './analytics-domain/analytics.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { SalesDomainModule } from './sales-domain/sales-domain.module';
+import { PricingDomainModule } from './pricing-domain/pricing-domain.module';
+import { InvoiceDomainModule } from './invoice-domain/invoice-domain.module';
+import { PaymentDomainModule } from './payment-domain/payment-domain.module';
+import { ReturnsDomainModule } from './returns-domain/returns-domain.module';
+import { AnalyticsDomainModule } from './analytics-domain/analytics-domain.module';
+import { SalesEventsDomainModule } from './sales-events-domain/sales-events-domain.module';
+import { PurchaseDomainModule } from './purchase-domain/purchase-domain.module';
+
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -138,6 +147,14 @@ import { ScheduleModule } from '@nestjs/schedule';
     BatchModule,
     EventsModule,
     AnalyticsModule,
+    SalesDomainModule,
+    PricingDomainModule,
+    InvoiceDomainModule,
+    PaymentDomainModule,
+    ReturnsDomainModule,
+    AnalyticsDomainModule,
+    SalesEventsDomainModule,
+    PurchaseDomainModule,
   ],
   controllers: [AppController],
   providers: [

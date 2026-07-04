@@ -1,0 +1,40 @@
+import { Module } from '@nestjs/common';
+import { PrismaModule } from '../prisma/prisma.module';
+import { BullModule } from '@nestjs/bullmq';
+import { ScheduleModule } from '@nestjs/schedule';
+
+import { SalesEventPublisher } from './services/sales-event-publisher.service';
+import { SalesRedisBroadcaster } from './services/sales-redis-broadcaster.service';
+import { SalesOutboxRelayCron } from './workers/sales-outbox-relay.cron';
+import { SalesEventRouterWorker } from './workers/sales-event-router.worker';
+import { SalesWebhookWorker } from './workers/sales-webhook.worker';
+import { SalesEventsController } from './sales-events.controller';
+
+@Module({
+  imports: [
+    PrismaModule,
+    ScheduleModule.forRoot(), // Ensure cron is active if not globally activated
+    BullModule.registerQueue({
+      name: 'sales-events',
+    }),
+    BullModule.registerQueue({
+      name: 'sales-webhooks',
+    }),
+    BullModule.registerQueue({
+      name: 'sales-analytics',
+    }),
+    BullModule.registerQueue({
+      name: 'sales-notifications',
+    }),
+  ],
+  controllers: [SalesEventsController],
+  providers: [
+    SalesEventPublisher,
+    SalesRedisBroadcaster,
+    SalesOutboxRelayCron,
+    SalesEventRouterWorker,
+    SalesWebhookWorker
+  ],
+  exports: [SalesEventPublisher]
+})
+export class SalesEventsDomainModule {}
