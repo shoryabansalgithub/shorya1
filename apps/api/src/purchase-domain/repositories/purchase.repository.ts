@@ -1,11 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PurchaseNumberEngine } from '../services/purchase-number-engine.service';
 import { PurchaseLifecycleService } from '../services/purchase-lifecycle.service';
 import { PurchaseValidationService } from '../services/purchase-validation.service';
 import { PurchaseAuditService } from '../services/purchase-audit.service';
 import { SalesEventPublisher } from '../../sales-events-domain/services/sales-event-publisher.service';
+import { PurchaseDraftService } from '../services/purchase-draft.service';
+import { PurchaseApprovalService } from '../services/purchase-approval.service';
+import { PurchasePricingService } from '../services/purchase-pricing.service';
+import { PurchaseTaxService } from '../services/purchase-tax.service';
 import { Prisma, PurchaseOrderStatus } from '@prisma/client';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 
 @Injectable()
 export class PurchaseRepository {
@@ -15,17 +21,22 @@ export class PurchaseRepository {
     private readonly lifecycle: PurchaseLifecycleService,
     private readonly validation: PurchaseValidationService,
     private readonly audit: PurchaseAuditService,
-    private readonly eventPublisher: SalesEventPublisher
+    private readonly draft: PurchaseDraftService,
+    private readonly approval: PurchaseApprovalService,
+    private readonly pricing: PurchasePricingService,
+    private readonly tax: PurchaseTaxService,
+    private readonly eventPublisher: SalesEventPublisher,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache
   ) {}
 
-  /**
-   * Creates a new Draft or Submitted Enterprise Purchase Order.
-   */
   async createPurchaseOrder(shopId: string, payload: any, actorId: string, ipAddress?: string) {
     const { supplierId, items, ...metadata } = payload;
     
     await this.validation.validateSupplier(shopId, supplierId);
     await this.validation.validateItems(shopId, items);
+
+    // Perform tax calculation if required
+    const taxedItems = this.tax.calculateTaxes(items, metadata.taxMode || 'EXCLUSIVE', metadata.currency || 'USD', metadata.exchangeRate || 1);
 
     return this.prisma.$transaction(async (tx) => {
       const orderNumber = await this.numberEngine.generateNextOrderNumber(tx, shopId, 'PO');
@@ -47,8 +58,10 @@ export class PurchaseRepository {
           currency: metadata.currency || 'USD',
           exchangeRate: metadata.exchangeRate || 1.0,
           remarks: metadata.remarks,
+          taxMode: metadata.taxMode || 'EXCLUSIVE',
+          shippingInstructions: metadata.shippingInstructions,
           items: {
-            create: items.map((item: any) => ({
+            create: taxedItems.map((item: any) => ({
               productId: item.productId,
               variantId: item.variantId,
               quantity: item.quantity,
@@ -58,16 +71,22 @@ export class PurchaseRepository {
               cgstAmount: item.cgstAmount || 0,
               sgstAmount: item.sgstAmount || 0,
               igstAmount: item.igstAmount || 0,
+              cessAmount: item.cessAmount || 0,
               totalCost: item.totalCost,
+              price: item.price || 0,
+              tax: item.tax || 0,
               hsnSac: item.hsnSac,
+              warehouseId: item.warehouseId,
+              binId: item.binId,
+              expectedDate: item.expectedDate ? new Date(item.expectedDate) : null,
+              remarks: item.remarks
             }))
           }
         },
         include: { items: true }
       });
 
-      await this.audit.recordAudit(tx, purchaseOrder.id, shopId, 'CREATED', actorId, null, purchaseOrder, ipAddress);
-      
+      await this.audit.recordAudit(tx, purchaseOrder.id, shopId, 'CREATED', actorId, null, purchaseOrder as any, ipAddress);
       await this.lifecycle.transitionStatus(tx, purchaseOrder.id, shopId, 'DRAFT', 'DRAFT', actorId, 'Initial PO Creation');
 
       await this.eventPublisher.publish(tx, shopId, {
@@ -79,19 +98,32 @@ export class PurchaseRepository {
       });
 
       return purchaseOrder;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async getPurchaseOrder(shopId: string, id: string) {
+    const cacheKey = `po:${shopId}:${id}`;
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) return cached;
+
     const po = await this.prisma.purchaseOrder.findUnique({
       where: { id },
-      include: { items: true, timelines: { orderBy: { createdAt: 'desc' } } }
+      include: { 
+        items: true, 
+        timelines: { orderBy: { createdAt: 'desc' } },
+        attachments: { where: { isDeleted: false } },
+        revisions: true,
+        approvals: true,
+        comments: true,
+        pricingSnapshot: true
+      }
     });
 
     if (!po || po.shopId !== shopId || po.isDeleted) {
       throw new NotFoundException(`Purchase Order ${id} not found.`);
     }
 
+    await this.cacheManager.set(cacheKey, po, 60000); // 1 minute cache
     return po;
   }
 
@@ -105,23 +137,74 @@ export class PurchaseRepository {
     });
   }
 
-  async approvePurchaseOrder(shopId: string, id: string, actorId: string, ipAddress?: string) {
-    const po = await this.getPurchaseOrder(shopId, id);
-    
+  async submitPurchaseOrder(shopId: string, id: string, actorId: string, comments?: string) {
     return this.prisma.$transaction(async (tx) => {
-      await this.lifecycle.transitionStatus(tx, po.id, shopId, po.status, 'APPROVED', actorId, 'Approved by procurement team.');
+      const po = await this.approval.submitForApproval(tx, shopId, id, actorId, comments);
       
-      await this.audit.recordAudit(tx, po.id, shopId, 'STATUS_APPROVED', actorId, po.status, 'APPROVED', ipAddress);
+      await this.eventPublisher.publish(tx, shopId, {
+        eventType: 'PurchaseOrderSubmitted',
+        aggregateId: id,
+        aggregateType: 'PurchaseOrder',
+        payload: { id, status: 'SUBMITTED' },
+        actorId,
+      });
+
+      await this.cacheManager.del(`po:${shopId}:${id}`);
+      return po;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async approvePurchaseOrder(shopId: string, id: string, actorId: string, ipAddress?: string, comments?: string, signature?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const po = await this.approval.processApproval(tx, shopId, id, actorId, 'APPROVE', comments, signature);
+      
+      // Store immutable pricing snapshot upon approval
+      await this.pricing.createSnapshot(tx, shopId, id);
 
       await this.eventPublisher.publish(tx, shopId, {
         eventType: 'PurchaseApproved',
-        aggregateId: po.id,
+        aggregateId: po!.id,
         aggregateType: 'PurchaseOrder',
-        payload: { id: po.id, status: 'APPROVED' },
+        payload: { id: po!.id, status: 'APPROVED' },
         actorId,
       });
       
-      return tx.purchaseOrder.findUnique({ where: { id: po.id } });
-    });
+      await this.cacheManager.del(`po:${shopId}:${id}`);
+      return tx.purchaseOrder.findUnique({ where: { id: po!.id } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async rejectPurchaseOrder(shopId: string, id: string, actorId: string, comments?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const po = await this.approval.processApproval(tx, shopId, id, actorId, 'REJECT', comments);
+      
+      await this.eventPublisher.publish(tx, shopId, {
+        eventType: 'PurchaseOrderRejected',
+        aggregateId: po!.id,
+        aggregateType: 'PurchaseOrder',
+        payload: { id: po!.id, status: 'REJECTED' },
+        actorId,
+      });
+
+      await this.cacheManager.del(`po:${shopId}:${id}`);
+      return po;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async updateDraft(shopId: string, id: string, payload: any, actorId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const updatedPo = await this.draft.saveDraft(tx, shopId, id, payload, actorId);
+      
+      await this.eventPublisher.publish(tx, shopId, {
+        eventType: 'PurchaseOrderVersionCreated',
+        aggregateId: id,
+        aggregateType: 'PurchaseOrder',
+        payload: { id, revisionNumber: updatedPo.revisionNumber },
+        actorId,
+      });
+
+      await this.cacheManager.del(`po:${shopId}:${id}`);
+      return updatedPo;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 }

@@ -1,0 +1,38 @@
+import { Controller, Get, Post, Param, Body, UseGuards, Query } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { TenantGuard } from '../iam/guards/tenant.guard';
+import { CurrentShop } from '../iam/decorators/current-shop.decorator';
+import { CurrentUser } from '../iam/decorators/current-user.decorator';
+import { EventsDlqService } from './services/events-dlq.service';
+import { EventsReplayService } from './services/events-replay.service';
+import { EventsStatisticsService } from './services/events-statistics.service';
+
+@UseGuards(JwtAuthGuard, TenantGuard)
+@Controller('purchase-events')
+export class PurchaseEventsController {
+  constructor(
+    private readonly dlqService: EventsDlqService,
+    private readonly replayService: EventsReplayService,
+    private readonly statisticsService: EventsStatisticsService
+  ) {}
+
+  @Get('statistics')
+  async getStatistics(@CurrentShop() shopId: string) {
+    return this.statisticsService.getDashboardMetrics(shopId);
+  }
+
+  @Get('dead-letter')
+  async getDeadLetters(@CurrentShop() shopId: string, @Query('limit') limit = 50) {
+    return this.dlqService.getDeadLetters(shopId, Number(limit));
+  }
+
+  @Post('retry/:id')
+  async retryEvent(@CurrentShop() shopId: string, @Param('id') eventId: string) {
+    return this.dlqService.retryDeadLetter(shopId, eventId);
+  }
+
+  @Post('replay')
+  async requestReplay(@CurrentShop() shopId: string, @CurrentUser('id') actorId: string, @Body() body: any) {
+    return this.replayService.scheduleReplay(shopId, body.aggregateId, actorId);
+  }
+}

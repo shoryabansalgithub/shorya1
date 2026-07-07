@@ -26,7 +26,15 @@ export class OutboxProcessorWorker {
     try {
       // Find up to 100 PENDING outbox events
       const events = await this.prisma.outboxEvent.findMany({
-        where: { status: 'PENDING' },
+        where: { 
+          status: 'PENDING',
+          OR: [
+            { type: { startsWith: 'Product' } },
+            { type: { startsWith: 'Inventory' } },
+            { type: { startsWith: 'Category' } },
+            { type: { startsWith: 'Brand' } }
+          ]
+        },
         take: 100,
         orderBy: { createdAt: 'asc' }
       });

@@ -53,6 +53,14 @@ import { ReturnsDomainModule } from './returns-domain/returns-domain.module';
 import { AnalyticsDomainModule } from './analytics-domain/analytics-domain.module';
 import { SalesEventsDomainModule } from './sales-events-domain/sales-events-domain.module';
 import { PurchaseDomainModule } from './purchase-domain/purchase-domain.module';
+import { GrnDomainModule } from './grn-domain/grn-domain.module';
+import { VendorBillDomainModule } from './vendor-bill-domain/vendor-bill-domain.module';
+import { PurchaseReturnDomainModule } from './purchase-return-domain/purchase-return-domain.module';
+import { SupplierCreditDomainModule } from './supplier-credit-domain/supplier-credit-domain.module';
+import { ProcurementWorkflowDomainModule } from './procurement-workflow-domain/procurement-workflow-domain.module';
+import { PurchaseAnalyticsDomainModule } from './purchase-analytics-domain/purchase-analytics-domain.module';
+import { PurchaseEventsDomainModule } from './purchase-events-domain/purchase-events-domain.module';
+import { DocumentModule } from './common/document/document.module';
 
 @Module({
   imports: [
@@ -155,6 +163,14 @@ import { PurchaseDomainModule } from './purchase-domain/purchase-domain.module';
     AnalyticsDomainModule,
     SalesEventsDomainModule,
     PurchaseDomainModule,
+    GrnDomainModule,
+    VendorBillDomainModule,
+    PurchaseReturnDomainModule,
+    SupplierCreditDomainModule,
+    ProcurementWorkflowDomainModule,
+    PurchaseAnalyticsDomainModule,
+    PurchaseEventsDomainModule,
+    DocumentModule,
   ],
   controllers: [AppController],
   providers: [

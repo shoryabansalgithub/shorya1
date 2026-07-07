@@ -838,6 +838,10 @@ model Supplier {
   shop           Shop            @relation(fields: [shopId], references: [id], onDelete: Restrict)
   products       Product[]
   purchaseOrders PurchaseOrder[]
+  goodsReceipts  GoodsReceipt[]
+  vendorBills    VendorBill[]
+  purchaseReturns PurchaseReturn[]
+  supplierCredits SupplierCreditNote[]
 
   @@unique([shopId, phone, deletedAt])
   @@index([shopId])
@@ -1089,8 +1093,24 @@ model PurchaseOrder {
   remarks          String?
   tags             Json?
   
+  // Phase 3.4.2 Extensions
+  revisionNumber   Int                 @default(1)
+  versionNumber    Int                 @default(1)
+  taxMode          String              @default("EXCLUSIVE")
+  shippingInstructions String?         @db.Text
+  archive          Boolean             @default(false)
+  
   timelines        PurchaseOrderTimeline[]
   audits           PurchaseOrderAudit[]
+  attachments      PurchaseOrderAttachment[]
+  revisions        PurchaseOrderRevision[]
+  approvals        PurchaseOrderApproval[]
+  comments         PurchaseOrderComment[]
+  pricingSnapshot  PurchasePricingSnapshot?
+  goodsReceipts    GoodsReceipt[]
+  vendorBills      VendorBill[]
+  purchaseReturns  PurchaseReturn[]
+  workflowInstances WorkflowInstance[]
 
   @@unique([shopId, orderNumber, deletedAt])
   @@index([shopId, status])
@@ -1122,6 +1142,15 @@ model PurchaseOrderItem {
   hsnSac        String?
   batchReady    Boolean       @default(false)
   serialReady   Boolean       @default(false)
+
+  // Phase 3.4.2 Extensions
+  price         Decimal       @default(0) @db.Decimal(10, 2)
+  tax           Decimal       @default(0) @db.Decimal(10, 2)
+  cessAmount    Decimal       @default(0) @db.Decimal(10, 2)
+  warehouseId   String?
+  binId         String?
+  expectedDate  DateTime?
+  remarks       String?       @db.Text
 
   @@index([purchaseOrderId])
   @@index([productId])
@@ -1158,6 +1187,1125 @@ model PurchaseOrderAudit {
   @@index([purchaseOrderId])
   @@index([shopId, action])
 }
+
+model PurchaseOrderAttachment {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  shopId          String
+  fileName        String
+  fileUrl         String
+  fileType        String
+  fileSize        Int      @default(0)
+  virusScanStatus String   @default("PENDING") // PENDING, CLEAN, INFECTED
+  metadata        Json?
+  uploadedById    String?
+  createdAt       DateTime @default(now())
+  isDeleted       Boolean  @default(false)
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+  @@index([shopId])
+}
+
+model PurchaseOrderRevision {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  shopId          String
+  revisionNumber  Int
+  snapshotData    Json
+  createdBy       String?
+  commitMessage   String?
+  createdAt       DateTime @default(now())
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+  @@index([shopId])
+}
+
+model PurchaseOrderApproval {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  shopId          String
+  step            Int      @default(1)
+  approverId      String
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  comments        String?  @db.Text
+  digitalSignature String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+  @@index([shopId])
+}
+
+model PurchaseOrderComment {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  shopId          String
+  authorId        String
+  text            String   @db.Text
+  isInternal      Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+  @@index([shopId])
+}
+
+model PurchasePricingSnapshot {
+  id              String   @id @default(cuid())
+  purchaseOrderId String   @unique
+  shopId          String
+  snapshotData    Json
+  createdAt       DateTime @default(now())
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+}
+
+enum GoodsReceiptStatus {
+  DRAFT
+  RECEIVING
+  PARTIALLY_RECEIVED
+  QUALITY_INSPECTION
+  ACCEPTED
+  COMPLETED
+  CLOSED
+  REJECTED
+  CANCELLED
+  ARCHIVED
+}
+
+model GoodsReceipt {
+  id              String   @id @default(cuid())
+  shopId          String
+  purchaseOrderId String
+  grnNumber       String
+  status          GoodsReceiptStatus @default(DRAFT)
+  supplierId      String
+  warehouseId     String
+  expectedDate    DateTime?
+  receivedDate    DateTime?
+  vehicleNumber   String?
+  transporter     String?
+  trackingNumber  String?
+  totalQuantity   Decimal  @default(0) @db.Decimal(10, 3)
+  totalValue      Decimal  @default(0) @db.Decimal(10, 2)
+  notes           String?  @db.Text
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  isDeleted       Boolean  @default(false)
+  deletedAt       DateTime?
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  supplier        Supplier      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  
+  lines           GoodsReceiptLine[]
+  attachments     GoodsReceiptAttachment[]
+  audits          GoodsReceiptAudit[]
+  statusHistory   GoodsReceiptStatusHistory[]
+  inspections     GoodsReceiptInspection[]
+  versions        GoodsReceiptVersion[]
+  comments        GoodsReceiptComment[]
+  approvals       GoodsReceiptApproval[]
+  vendorBills     VendorBill[]
+  purchaseReturns PurchaseReturn[]
+  workflowInstances WorkflowInstance[]
+
+  @@unique([shopId, grnNumber, deletedAt])
+  @@index([shopId, status])
+  @@index([purchaseOrderId])
+  @@index([supplierId])
+  @@index([warehouseId])
+}
+
+model GoodsReceiptLine {
+  id               String   @id @default(cuid())
+  goodsReceiptId   String
+  productId        String
+  variantId        String?
+  batchId          String?
+  serialId         String?
+  orderedQuantity  Decimal  @default(0) @db.Decimal(10, 3)
+  receivedQuantity Decimal  @default(0) @db.Decimal(10, 3)
+  acceptedQuantity Decimal  @default(0) @db.Decimal(10, 3)
+  rejectedQuantity Decimal  @default(0) @db.Decimal(10, 3)
+  damagedQuantity  Decimal  @default(0) @db.Decimal(10, 3)
+  pendingQuantity  Decimal  @default(0) @db.Decimal(10, 3)
+  unit             String?
+  unitPrice        Decimal  @default(0) @db.Decimal(10, 2)
+  remarks          String?  @db.Text
+  binId            String?
+  isDeleted        Boolean  @default(false)
+
+  goodsReceipt     GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+
+  @@index([goodsReceiptId])
+  @@index([productId])
+}
+
+model GoodsReceiptAttachment {
+  id              String   @id @default(cuid())
+  goodsReceiptId  String
+  shopId          String
+  fileName        String
+  fileUrl         String
+  fileType        String
+  fileSize        Int      @default(0)
+  metadata        Json?
+  uploadedById    String?
+  createdAt       DateTime @default(now())
+  isDeleted       Boolean  @default(false)
+
+  goodsReceipt    GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+
+  @@index([goodsReceiptId])
+}
+
+model GoodsReceiptAudit {
+  id              String   @id @default(cuid())
+  goodsReceiptId  String
+  shopId          String
+  actorId         String?
+  action          String
+  previousPayload Json?
+  newPayload      Json?
+  ipAddress       String?
+  createdAt       DateTime @default(now())
+
+  goodsReceipt    GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+
+  @@index([goodsReceiptId])
+  @@index([shopId, action])
+}
+
+model GoodsReceiptStatusHistory {
+  id              String   @id @default(cuid())
+  goodsReceiptId  String
+  shopId          String
+  status          GoodsReceiptStatus
+  actorId         String?
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now())
+
+  goodsReceipt    GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+
+  @@index([goodsReceiptId])
+}
+
+model GoodsReceiptInspection {
+  id              String   @id @default(cuid())
+  goodsReceiptId  String
+  shopId          String
+  inspectorId     String?
+  status          String   @default("PENDING")
+  checklist       Json?
+  inspectionDate  DateTime?
+  notes           String?  @db.Text
+  images          Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  goodsReceipt    GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+
+  @@index([goodsReceiptId])
+}
+
+model GoodsReceiptVersion {
+  id              String   @id @default(cuid())
+  goodsReceiptId  String
+  shopId          String
+  versionNumber   Int
+  snapshotData    Json
+  createdBy       String?
+  commitMessage   String?
+  createdAt       DateTime @default(now())
+
+  goodsReceipt    GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+
+  @@index([goodsReceiptId])
+}
+
+model GoodsReceiptComment {
+  id              String   @id @default(cuid())
+  goodsReceiptId  String
+  shopId          String
+  authorId        String
+  text            String   @db.Text
+  isInternal      Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  goodsReceipt    GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+
+  @@index([goodsReceiptId])
+}
+
+model GoodsReceiptApproval {
+  id              String   @id @default(cuid())
+  goodsReceiptId  String
+  shopId          String
+  step            Int      @default(1)
+  approverId      String
+  status          String   @default("PENDING")
+  comments        String?  @db.Text
+  digitalSignature String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  goodsReceipt    GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+
+  @@index([goodsReceiptId])
+}
+
+enum VendorBillStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_APPROVAL
+  APPROVED
+  POSTED
+  PARTIALLY_PAID
+  PAID
+  CLOSED
+  REJECTED
+  CANCELLED
+  ARCHIVED
+}
+
+model VendorBill {
+  id                String   @id @default(cuid())
+  shopId            String
+  supplierId        String
+  purchaseOrderId   String?
+  goodsReceiptId    String?
+  billNumber        String
+  invoiceNumber     String?
+  invoiceDate       DateTime?
+  postingDate       DateTime?
+  dueDate           DateTime?
+  status            VendorBillStatus @default(DRAFT)
+  currency          String   @default("USD")
+  exchangeRate      Decimal  @default(1.0) @db.Decimal(10, 4)
+  paymentTerms      String?
+  referenceNumber   String?
+  remarks           String?  @db.Text
+  totalAmount       Decimal  @default(0) @db.Decimal(10, 2)
+  taxAmount         Decimal  @default(0) @db.Decimal(10, 2)
+  discountAmount    Decimal  @default(0) @db.Decimal(10, 2)
+  outstandingAmount Decimal  @default(0) @db.Decimal(10, 2)
+  paidAmount        Decimal  @default(0) @db.Decimal(10, 2)
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  isDeleted         Boolean  @default(false)
+  deletedAt         DateTime?
+
+  supplier          Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseOrder     PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  goodsReceipt      GoodsReceipt?  @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
+
+  lines             VendorBillLine[]
+  attachments       VendorBillAttachment[]
+  approvals         VendorBillApproval[]
+  audits            VendorBillAudit[]
+  comments          VendorBillComment[]
+  versions          VendorBillVersion[]
+  statusHistory     VendorBillStatusHistory[]
+  paymentSchedules  VendorPaymentSchedule[]
+  purchaseReturns   PurchaseReturn[]
+  supplierCredits   SupplierCreditNote[]
+  creditAllocations SupplierCreditAllocation[]
+  workflowInstances WorkflowInstance[]
+
+  @@unique([shopId, billNumber, deletedAt])
+  @@index([shopId, status])
+  @@index([supplierId])
+  @@index([purchaseOrderId])
+  @@index([goodsReceiptId])
+}
+
+model VendorBillLine {
+  id                  String   @id @default(cuid())
+  vendorBillId        String
+  purchaseOrderLineId String?
+  grnLineId           String?
+  productId           String
+  variantId           String?
+  billedQuantity      Decimal  @default(0) @db.Decimal(10, 3)
+  unitPrice           Decimal  @default(0) @db.Decimal(10, 2)
+  taxPercentage       Decimal  @default(0) @db.Decimal(5, 2)
+  taxAmount           Decimal  @default(0) @db.Decimal(10, 2)
+  discountAmount      Decimal  @default(0) @db.Decimal(10, 2)
+  totalAmount         Decimal  @default(0) @db.Decimal(10, 2)
+  remarks             String?  @db.Text
+  isDeleted           Boolean  @default(false)
+
+  vendorBill          VendorBill @relation(fields: [vendorBillId], references: [id], onDelete: Cascade)
+
+  @@index([vendorBillId])
+  @@index([productId])
+}
+
+model VendorBillAttachment {
+  id              String   @id @default(cuid())
+  vendorBillId    String
+  shopId          String
+  fileName        String
+  fileUrl         String
+  fileType        String
+  fileSize        Int      @default(0)
+  metadata        Json?
+  uploadedById    String?
+  createdAt       DateTime @default(now())
+  isDeleted       Boolean  @default(false)
+
+  vendorBill      VendorBill @relation(fields: [vendorBillId], references: [id], onDelete: Cascade)
+
+  @@index([vendorBillId])
+}
+
+model VendorBillApproval {
+  id              String   @id @default(cuid())
+  vendorBillId    String
+  shopId          String
+  step            Int      @default(1)
+  approverId      String
+  status          String   @default("PENDING")
+  comments        String?  @db.Text
+  digitalSignature String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  vendorBill      VendorBill @relation(fields: [vendorBillId], references: [id], onDelete: Cascade)
+
+  @@index([vendorBillId])
+}
+
+model VendorBillAudit {
+  id              String   @id @default(cuid())
+  vendorBillId    String
+  shopId          String
+  actorId         String?
+  action          String
+  previousPayload Json?
+  newPayload      Json?
+  ipAddress       String?
+  createdAt       DateTime @default(now())
+
+  vendorBill      VendorBill @relation(fields: [vendorBillId], references: [id], onDelete: Cascade)
+
+  @@index([vendorBillId])
+  @@index([shopId, action])
+}
+
+model VendorBillComment {
+  id              String   @id @default(cuid())
+  vendorBillId    String
+  shopId          String
+  authorId        String
+  text            String   @db.Text
+  isInternal      Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  vendorBill      VendorBill @relation(fields: [vendorBillId], references: [id], onDelete: Cascade)
+
+  @@index([vendorBillId])
+}
+
+model VendorBillVersion {
+  id              String   @id @default(cuid())
+  vendorBillId    String
+  shopId          String
+  versionNumber   Int
+  snapshotData    Json
+  createdBy       String?
+  commitMessage   String?
+  createdAt       DateTime @default(now())
+
+  vendorBill      VendorBill @relation(fields: [vendorBillId], references: [id], onDelete: Cascade)
+
+  @@index([vendorBillId])
+}
+
+model VendorBillStatusHistory {
+  id              String   @id @default(cuid())
+  vendorBillId    String
+  shopId          String
+  status          VendorBillStatus
+  actorId         String?
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now())
+
+  vendorBill      VendorBill @relation(fields: [vendorBillId], references: [id], onDelete: Cascade)
+
+  @@index([vendorBillId])
+}
+
+model VendorPaymentSchedule {
+  id                String   @id @default(cuid())
+  vendorBillId      String
+  installmentNumber Int      @default(1)
+  dueDate           DateTime
+  amountDue         Decimal  @default(0) @db.Decimal(10, 2)
+  amountPaid        Decimal  @default(0) @db.Decimal(10, 2)
+  status            String   @default("PENDING") // PENDING, PARTIALLY_PAID, PAID
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  vendorBill        VendorBill @relation(fields: [vendorBillId], references: [id], onDelete: Cascade)
+
+  @@index([vendorBillId])
+}
+enum PurchaseReturnStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_APPROVAL
+  APPROVED
+  SHIPPED
+  COMPLETED
+  REJECTED
+  CANCELLED
+  ARCHIVED
+}
+
+model PurchaseReturn {
+  id                String   @id @default(cuid())
+  shopId            String
+  returnNumber      String
+  supplierId        String
+  purchaseOrderId   String?
+  goodsReceiptId    String?
+  vendorBillId      String?
+  warehouseId       String?
+  
+  status            PurchaseReturnStatus @default(DRAFT)
+  returnType        String   @default("CREDIT") // CREDIT or REPLACEMENT
+  reasonCode        String?
+  priority          String   @default("NORMAL")
+  expectedReturnDate DateTime?
+  
+  totalAmount       Decimal  @default(0) @db.Decimal(10, 2)
+  taxAmount         Decimal  @default(0) @db.Decimal(10, 2)
+  discountAmount    Decimal  @default(0) @db.Decimal(10, 2)
+  
+  notes             String?  @db.Text
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  isDeleted         Boolean  @default(false)
+  deletedAt         DateTime?
+
+  supplier          Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseOrder     PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  goodsReceipt      GoodsReceipt?  @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
+  vendorBill        VendorBill?    @relation(fields: [vendorBillId], references: [id], onDelete: Restrict)
+  warehouse         Warehouse?     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  lines             PurchaseReturnLine[]
+  attachments       PurchaseReturnAttachment[]
+  approvals         PurchaseReturnApproval[]
+  audits            PurchaseReturnAudit[]
+  comments          PurchaseReturnComment[]
+  shipments         PurchaseReturnShipment[]
+  replacements      PurchaseReplacement[]
+  statusHistory     PurchaseReturnStatusHistory[]
+  supplierCredits   SupplierCreditNote[]
+  workflowInstances WorkflowInstance[]
+
+  @@unique([shopId, returnNumber, deletedAt])
+  @@index([shopId, status])
+  @@index([supplierId])
+  @@index([purchaseOrderId])
+}
+
+model PurchaseReturnLine {
+  id                  String   @id @default(cuid())
+  purchaseReturnId    String
+  purchaseOrderLineId String?
+  grnLineId           String?
+  productId           String
+  variantId           String?
+  batchId             String?
+  serialId            String?
+  
+  returnQuantity      Decimal  @default(0) @db.Decimal(10, 3)
+  acceptedQuantity    Decimal  @default(0) @db.Decimal(10, 3)
+  rejectedQuantity    Decimal  @default(0) @db.Decimal(10, 3)
+  
+  unitPrice           Decimal  @default(0) @db.Decimal(10, 2)
+  taxPercentage       Decimal  @default(0) @db.Decimal(5, 2)
+  taxAmount           Decimal  @default(0) @db.Decimal(10, 2)
+  totalAmount         Decimal  @default(0) @db.Decimal(10, 2)
+  
+  reason              String?
+  damageType          String?
+  condition           String?  @default("DAMAGED")
+  remarks             String?  @db.Text
+  isDeleted           Boolean  @default(false)
+
+  purchaseReturn      PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseReturnId])
+  @@index([productId])
+}
+
+model PurchaseReturnAttachment {
+  id                String   @id @default(cuid())
+  purchaseReturnId  String
+  shopId            String
+  fileName          String
+  fileUrl           String
+  fileType          String
+  fileSize          Int      @default(0)
+  metadata          Json?
+  uploadedById      String?
+  createdAt         DateTime @default(now())
+  isDeleted         Boolean  @default(false)
+
+  purchaseReturn    PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseReturnId])
+}
+
+model PurchaseReturnApproval {
+  id                String   @id @default(cuid())
+  purchaseReturnId  String
+  shopId            String
+  step              Int      @default(1)
+  approverId        String
+  status            String   @default("PENDING")
+  comments          String?  @db.Text
+  digitalSignature  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  purchaseReturn    PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseReturnId])
+}
+
+model PurchaseReturnAudit {
+  id                String   @id @default(cuid())
+  purchaseReturnId  String
+  shopId            String
+  actorId           String?
+  action            String
+  previousPayload   Json?
+  newPayload        Json?
+  ipAddress         String?
+  createdAt         DateTime @default(now())
+
+  purchaseReturn    PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseReturnId])
+  @@index([shopId, action])
+}
+
+model PurchaseReturnComment {
+  id                String   @id @default(cuid())
+  purchaseReturnId  String
+  shopId            String
+  authorId          String
+  text              String   @db.Text
+  isInternal        Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  purchaseReturn    PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseReturnId])
+}
+
+model PurchaseReturnStatusHistory {
+  id                String   @id @default(cuid())
+  purchaseReturnId  String
+  shopId            String
+  status            PurchaseReturnStatus
+  actorId           String?
+  notes             String?  @db.Text
+  createdAt         DateTime @default(now())
+
+  purchaseReturn    PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseReturnId])
+}
+
+model PurchaseReturnShipment {
+  id                String   @id @default(cuid())
+  purchaseReturnId  String
+  shopId            String
+  carrier           String?
+  trackingNumber    String?
+  vehicleNumber     String?
+  transportCost     Decimal  @default(0) @db.Decimal(10, 2)
+  expectedDelivery  DateTime?
+  dispatchDate      DateTime?
+  deliveryDate      DateTime?
+  status            String   @default("PENDING_DISPATCH")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  purchaseReturn    PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseReturnId])
+}
+
+model PurchaseReplacement {
+  id                String   @id @default(cuid())
+  purchaseReturnId  String
+  shopId            String
+  expectedDate      DateTime?
+  receivedDate      DateTime?
+  status            String   @default("PENDING") // PENDING, PARTIALLY_RECEIVED, RECEIVED
+  notes             String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  purchaseReturn    PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseReturnId])
+}
+enum SupplierCreditStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_APPROVAL
+  APPROVED
+  ISSUED
+  ALLOCATED
+  CLOSED
+  REJECTED
+  CANCELLED
+  ARCHIVED
+}
+
+model SupplierCreditNote {
+  id                String   @id @default(cuid())
+  shopId            String
+  creditNumber      String
+  supplierId        String
+  purchaseReturnId  String?
+  vendorBillId      String?  // The original bill this credit was derived from (if applicable)
+  
+  status            SupplierCreditStatus @default(DRAFT)
+  creditSource      String   @default("PURCHASE_RETURN") // PURCHASE_RETURN, PRICE_DIFFERENCE, MANUAL, etc.
+  issueDate         DateTime?
+  expiryDate        DateTime?
+  
+  totalAmount       Decimal  @default(0) @db.Decimal(10, 2)
+  taxAmount         Decimal  @default(0) @db.Decimal(10, 2)
+  allocatedAmount   Decimal  @default(0) @db.Decimal(10, 2)
+  remainingBalance  Decimal  @default(0) @db.Decimal(10, 2)
+  
+  currency          String   @default("USD")
+  exchangeRate      Decimal  @default(1.0) @db.Decimal(10, 4)
+  notes             String?  @db.Text
+  
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  isDeleted         Boolean  @default(false)
+  deletedAt         DateTime?
+
+  supplier          Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseReturn    PurchaseReturn? @relation(fields: [purchaseReturnId], references: [id], onDelete: Restrict)
+  vendorBill        VendorBill?    @relation(fields: [vendorBillId], references: [id], onDelete: Restrict)
+
+  lines             SupplierCreditLine[]
+  allocations       SupplierCreditAllocation[]
+  attachments       SupplierCreditAttachment[]
+  approvals         SupplierCreditApproval[]
+  audits            SupplierCreditAudit[]
+  comments          SupplierCreditComment[]
+  versions          SupplierCreditVersion[]
+  statusHistory     SupplierCreditStatusHistory[]
+  workflowInstances WorkflowInstance[]
+
+  @@unique([shopId, creditNumber, deletedAt])
+  @@index([shopId, status])
+  @@index([supplierId])
+}
+
+model SupplierCreditLine {
+  id                  String   @id @default(cuid())
+  supplierCreditId    String
+  productId           String?
+  description         String?
+  
+  quantity            Decimal  @default(0) @db.Decimal(10, 3)
+  unitPrice           Decimal  @default(0) @db.Decimal(10, 2)
+  taxPercentage       Decimal  @default(0) @db.Decimal(5, 2)
+  taxAmount           Decimal  @default(0) @db.Decimal(10, 2)
+  totalAmount         Decimal  @default(0) @db.Decimal(10, 2)
+  
+  remarks             String?  @db.Text
+  isDeleted           Boolean  @default(false)
+
+  supplierCredit      SupplierCreditNote @relation(fields: [supplierCreditId], references: [id], onDelete: Cascade)
+
+  @@index([supplierCreditId])
+}
+
+model SupplierCreditAllocation {
+  id                  String   @id @default(cuid())
+  supplierCreditId    String
+  vendorBillId        String
+  shopId              String
+  allocatedAmount     Decimal  @default(0) @db.Decimal(10, 2)
+  allocatedDate       DateTime @default(now())
+  allocatedBy         String?
+  notes               String?  @db.Text
+
+  supplierCredit      SupplierCreditNote @relation(fields: [supplierCreditId], references: [id], onDelete: Cascade)
+  vendorBill          VendorBill         @relation(fields: [vendorBillId], references: [id], onDelete: Restrict)
+
+  @@index([supplierCreditId])
+  @@index([vendorBillId])
+}
+
+model SupplierCreditAttachment {
+  id                  String   @id @default(cuid())
+  supplierCreditId    String
+  shopId              String
+  fileName            String
+  fileUrl             String
+  fileType            String
+  fileSize            Int      @default(0)
+  metadata            Json?
+  uploadedById        String?
+  createdAt           DateTime @default(now())
+  isDeleted           Boolean  @default(false)
+
+  supplierCredit      SupplierCreditNote @relation(fields: [supplierCreditId], references: [id], onDelete: Cascade)
+
+  @@index([supplierCreditId])
+}
+
+model SupplierCreditApproval {
+  id                  String   @id @default(cuid())
+  supplierCreditId    String
+  shopId              String
+  step                Int      @default(1)
+  approverId          String
+  status              String   @default("PENDING")
+  comments            String?  @db.Text
+  digitalSignature    String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  supplierCredit      SupplierCreditNote @relation(fields: [supplierCreditId], references: [id], onDelete: Cascade)
+
+  @@index([supplierCreditId])
+}
+
+model SupplierCreditAudit {
+  id                  String   @id @default(cuid())
+  supplierCreditId    String
+  shopId              String
+  actorId             String?
+  action              String
+  previousPayload     Json?
+  newPayload          Json?
+  ipAddress           String?
+  createdAt           DateTime @default(now())
+
+  supplierCredit      SupplierCreditNote @relation(fields: [supplierCreditId], references: [id], onDelete: Cascade)
+
+  @@index([supplierCreditId])
+  @@index([shopId, action])
+}
+
+model SupplierCreditComment {
+  id                  String   @id @default(cuid())
+  supplierCreditId    String
+  shopId              String
+  authorId            String
+  text                String   @db.Text
+  isInternal          Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  supplierCredit      SupplierCreditNote @relation(fields: [supplierCreditId], references: [id], onDelete: Cascade)
+
+  @@index([supplierCreditId])
+}
+
+model SupplierCreditVersion {
+  id                  String   @id @default(cuid())
+  supplierCreditId    String
+  shopId              String
+  versionNumber       Int
+  snapshotData        Json
+  createdBy           String?
+  commitMessage       String?
+  createdAt           DateTime @default(now())
+
+  supplierCredit      SupplierCreditNote @relation(fields: [supplierCreditId], references: [id], onDelete: Cascade)
+
+  @@index([supplierCreditId])
+}
+
+model SupplierCreditStatusHistory {
+  id                  String   @id @default(cuid())
+  supplierCreditId    String
+  shopId              String
+  status              SupplierCreditStatus
+  actorId             String?
+  notes               String?  @db.Text
+  createdAt           DateTime @default(now())
+
+  supplierCredit      SupplierCreditNote @relation(fields: [supplierCreditId], references: [id], onDelete: Cascade)
+
+  @@index([supplierCreditId])
+}
+
+enum WorkflowStatus {
+  ACTIVE
+  COMPLETED
+  REJECTED
+  CANCELLED
+  ESCALATED
+}
+
+enum WorkflowTaskStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DELEGATED
+  ESCALATED
+  CANCELLED
+}
+
+model WorkflowDefinition {
+  id                String   @id @default(cuid())
+  shopId            String
+  name              String
+  documentType      String   // PURCHASE_ORDER, VENDOR_BILL, GRN, PURCHASE_RETURN, SUPPLIER_CREDIT
+  description       String?  @db.Text
+  isActive          Boolean  @default(true)
+  version           Int      @default(1)
+  
+  // JSON array of budget/threshold conditions to determine if this workflow applies
+  conditions        Json?    
+  
+  steps             WorkflowStep[]
+  instances         WorkflowInstance[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@unique([shopId, name, version])
+  @@index([shopId, documentType])
+}
+
+model WorkflowStep {
+  id                   String   @id @default(cuid())
+  workflowDefinitionId String
+  stepOrder            Int
+  name                 String
+  approverRole         String?  // The role required to approve (e.g. FINANCE_MANAGER)
+  approverId           String?  // Specific user ID
+  departmentId         String?  // Department required
+  isParallel           Boolean  @default(false)
+  
+  // Conditions evaluated to see if this specific step is required (e.g. amount > 5000)
+  conditions           Json?
+  
+  // SLA configuration
+  slaMinutes           Int?     // Allowed time before escalation
+  escalationRoleId     String?  // Who to escalate to
+  
+  workflowDefinition   WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id], onDelete: Cascade)
+  
+  @@index([workflowDefinitionId])
+}
+
+model WorkflowInstance {
+  id                   String   @id @default(cuid())
+  shopId               String
+  workflowDefinitionId String
+  
+  // Bound Documents
+  purchaseOrderId      String?
+  goodsReceiptId       String?
+  vendorBillId         String?
+  purchaseReturnId     String?
+  supplierCreditId     String?
+  
+  status               WorkflowStatus @default(ACTIVE)
+  currentStepOrder     Int            @default(1)
+  
+  startedBy            String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  workflowDefinition   WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id], onDelete: Restrict)
+  purchaseOrder        PurchaseOrder?     @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  goodsReceipt         GoodsReceipt?      @relation(fields: [goodsReceiptId], references: [id], onDelete: SetNull)
+  vendorBill           VendorBill?        @relation(fields: [vendorBillId], references: [id], onDelete: SetNull)
+  purchaseReturn       PurchaseReturn?    @relation(fields: [purchaseReturnId], references: [id], onDelete: SetNull)
+  supplierCredit       SupplierCreditNote? @relation(fields: [supplierCreditId], references: [id], onDelete: SetNull)
+
+  tasks                WorkflowTask[]
+  timeline             WorkflowTimeline[]
+
+  @@index([shopId, status])
+  @@index([purchaseOrderId])
+  @@index([vendorBillId])
+}
+
+model WorkflowTask {
+  id                   String   @id @default(cuid())
+  workflowInstanceId   String
+  shopId               String
+  stepOrder            Int
+  
+  assignedRoleId       String?
+  assignedUserId       String?
+  departmentId         String?
+  
+  status               WorkflowTaskStatus @default(PENDING)
+  comments             String?            @db.Text
+  digitalSignature     String?
+  
+  delegatedToUserId    String?
+  escalatedToRoleId    String?
+  
+  deadline             DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  workflowInstance     WorkflowInstance   @relation(fields: [workflowInstanceId], references: [id], onDelete: Cascade)
+
+  @@index([workflowInstanceId])
+  @@index([assignedUserId])
+  @@index([shopId, status])
+}
+
+model WorkflowDelegation {
+  id                   String   @id @default(cuid())
+  shopId               String
+  delegatorUserId      String
+  delegateUserId       String
+  startDate            DateTime
+  endDate              DateTime
+  isActive             Boolean  @default(true)
+  notes                String?  @db.Text
+  
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+  @@index([shopId, delegatorUserId])
+}
+
+model WorkflowTimeline {
+  id                   String   @id @default(cuid())
+  workflowInstanceId   String
+  shopId               String
+  actorId              String?
+  action               String   // e.g. SUBMITTED, APPROVED, DELEGATED, ESCALATED
+  notes                String?  @db.Text
+  metadata             Json?
+  
+  createdAt            DateTime @default(now())
+
+  workflowInstance     WorkflowInstance @relation(fields: [workflowInstanceId], references: [id], onDelete: Cascade)
+
+  @@index([workflowInstanceId])
+  @@index([shopId, action])
+}
+
+model PurchaseAnalyticsSnapshot {
+  id                   String   @id @default(cuid())
+  shopId               String
+  date                 DateTime @db.Date
+  
+  totalPurchases       Decimal  @default(0) @db.Decimal(15, 2)
+  totalOrdersCount     Int      @default(0)
+  pendingOrdersCount   Int      @default(0)
+  pendingGrnsCount     Int      @default(0)
+  pendingBillsCount    Int      @default(0)
+  outstandingPayables  Decimal  @default(0) @db.Decimal(15, 2)
+  
+  averageLeadTimeDays  Decimal  @default(0) @db.Decimal(10, 2)
+  averageApprovalHours Decimal  @default(0) @db.Decimal(10, 2)
+  
+  updatedAt            DateTime @updatedAt
+
+  @@unique([shopId, date])
+}
+
+model VendorPerformanceSnapshot {
+  id                   String   @id @default(cuid())
+  shopId               String
+  supplierId           String
+  
+  purchaseVolume       Decimal  @default(0) @db.Decimal(15, 2)
+  orderCount           Int      @default(0)
+  onTimeDeliveryPct    Decimal  @default(0) @db.Decimal(5, 2)
+  averageLeadTimeDays  Decimal  @default(0) @db.Decimal(10, 2)
+  defectRatePct        Decimal  @default(0) @db.Decimal(5, 2)
+  returnRatePct        Decimal  @default(0) @db.Decimal(5, 2)
+  
+  overallScore         Decimal  @default(0) @db.Decimal(5, 2) // Weighted score 0-100
+  
+  lastCalculatedAt     DateTime @default(now())
+
+  @@unique([shopId, supplierId])
+}
+
+model PurchaseTrendSnapshot {
+  id                   String   @id @default(cuid())
+  shopId               String
+  periodType           String   // DAILY, WEEKLY, MONTHLY
+  periodStart          DateTime
+  
+  spendAmount          Decimal  @default(0) @db.Decimal(15, 2)
+  orderCount           Int      @default(0)
+  
+  updatedAt            DateTime @updatedAt
+
+  @@unique([shopId, periodType, periodStart])
+}
+
+model PurchaseCategorySpendSnapshot {
+  id                   String   @id @default(cuid())
+  shopId               String
+  categoryId           String
+  departmentId         String?
+  
+  totalSpend           Decimal  @default(0) @db.Decimal(15, 2)
+  growthPct            Decimal  @default(0) @db.Decimal(5, 2)
+  
+  updatedAt            DateTime @updatedAt
+
+  @@unique([shopId, categoryId, departmentId])
+}
+
+model PurchaseAnalyticsJob {
+  id                   String   @id @default(cuid())
+  shopId               String
+  jobType              String   // AGGREGATE_DAILY, CALCULATE_VENDOR_SCORE
+  status               String   // PENDING, COMPLETED, FAILED
+  startedAt            DateTime?
+  completedAt          DateTime?
+  errorMessage         String?  @db.Text
+  
+  createdAt            DateTime @default(now())
+
+  @@index([shopId, status])
+}
+
 
 model StockTransfer {
   id                String              @id @default(cuid())
@@ -2429,6 +3577,8 @@ model Warehouse {
 
   shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
   locations        Location[]
+  goodsReceipts    GoodsReceipt[]
+  purchaseReturns  PurchaseReturn[]
 
   @@unique([shopId, code, deletedAt])
   @@index([shopId, isActive])
@@ -3828,5 +4978,113 @@ model AnalyticsExportJob {
   shop               Shop               @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId, status])
+}
+
+model PurchaseEventAudit {
+  id                String   @id @default(cuid())
+  shopId            String
+  outboxEventId     String
+  eventType         String
+  aggregateId       String?
+  status            String   // DELIVERED, REPLAYED, FAILED
+  actorId           String?
+  metadata          Json?
+  
+  createdAt         DateTime @default(now())
+
+  @@index([shopId, outboxEventId])
+  @@index([shopId, eventType])
+  @@index([aggregateId])
+}
+
+model PurchaseEventReplay {
+  id                String   @id @default(cuid())
+  shopId            String
+  targetEventId     String?
+  targetAggregateId String?
+  requestedById     String
+  status            String   // PENDING, COMPLETED, FAILED
+  resultSummary     String?  @db.Text
+  
+  createdAt         DateTime @default(now())
+  completedAt       DateTime?
+
+  @@index([shopId, status])
+}
+
+model PurchaseEventDelivery {
+  id                String   @id @default(cuid())
+  shopId            String
+  outboxEventId     String
+  consumerName      String   // e.g., 'INVENTORY_SYNC', 'ANALYTICS_UPDATE'
+  status            String   // SUCCESS, FAILED
+  latencyMs         Int?
+  errorMessage      String?  @db.Text
+  
+  createdAt         DateTime @default(now())
+
+  @@index([shopId, outboxEventId])
+  @@index([consumerName, status])
+}
+
+model PurchaseDeadLetter {
+  id                String   @id @default(cuid())
+  shopId            String
+  outboxEventId     String
+  eventType         String
+  payload           Json
+  failureReason     String   @db.Text
+  lastAttemptAt     DateTime
+  retryCount        Int      @default(0)
+  status            String   @default("ACTIVE") // ACTIVE, RESOLVED, DISCARDED
+  
+  createdAt         DateTime @default(now())
+  resolvedAt        DateTime?
+
+  @@index([shopId, status])
+}
+
+model PurchaseWebhookDelivery {
+  id                String   @id @default(cuid())
+  shopId            String
+  outboxEventId     String
+  endpointUrl       String
+  httpStatus        Int?
+  requestPayload    Json
+  responseBody      String?  @db.Text
+  errorMessage      String?  @db.Text
+  latencyMs         Int?
+  
+  createdAt         DateTime @default(now())
+
+  @@index([shopId, outboxEventId])
+  @@index([shopId, httpStatus])
+}
+
+model PurchaseConsumerState {
+  id                String   @id @default(cuid())
+  shopId            String
+  consumerName      String
+  lastProcessedId   String?
+  lastProcessedAt   DateTime?
+  
+  updatedAt         DateTime @updatedAt
+
+  @@unique([shopId, consumerName])
+}
+
+model PurchaseEventStatistics {
+  id                String   @id @default(cuid())
+  shopId            String
+  date              DateTime @db.Date
+  
+  totalPublished    Int      @default(0)
+  totalDelivered    Int      @default(0)
+  totalFailed       Int      @default(0)
+  totalDeadLettered Int      @default(0)
+  
+  updatedAt         DateTime @updatedAt
+
+  @@unique([shopId, date])
 }
 

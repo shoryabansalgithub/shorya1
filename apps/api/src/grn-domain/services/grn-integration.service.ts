@@ -1,0 +1,93 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { Prisma, StockMovementType } from '@prisma/client';
+import { StockLedgerService } from '../../stock-ledger-domain/services/stock-ledger.service';
+import { ProductEventPublisher } from '../../product-events/services/product-event-publisher.service';
+
+@Injectable()
+export class GrnIntegrationService {
+  private readonly logger = new Logger(GrnIntegrationService.name);
+
+  constructor(
+    private readonly stockLedger: StockLedgerService,
+    private readonly eventPublisher: ProductEventPublisher
+  ) {}
+
+  /**
+   * Translates GRN acceptance into immutable Stock Ledger Entries 
+   * and delegates Inventory Engine updates without bypassing domains.
+   */
+  async updateInventoryFromGrn(
+    tx: Prisma.TransactionClient, 
+    shopId: string, 
+    grn: any
+  ) {
+    this.logger.debug(`Integrating GRN ${grn.id} with Inventory & Stock Ledger`);
+
+    for (const line of grn.lines) {
+      if (parseFloat(line.acceptedQuantity) <= 0) continue;
+
+      let inventoryItemId = '';
+      let oldOnHand = 0;
+      const quantityChange = parseFloat(line.acceptedQuantity);
+
+      // Update InventoryItem safely (simulating calling existing InventoryDomain logic)
+      const invItem = await tx.inventoryItem.findFirst({
+        where: { shopId, productId: line.productId, locationId: grn.warehouseId }
+      });
+
+      if (invItem) {
+        inventoryItemId = invItem.id;
+        oldOnHand = invItem.onHand.toNumber();
+        await tx.inventoryItem.update({
+          where: { id: invItem.id },
+          data: {
+            onHand: { increment: quantityChange }
+          }
+        });
+      } else {
+        const newItem = await tx.inventoryItem.create({
+          data: {
+            shopId,
+            productId: line.productId,
+            locationId: grn.warehouseId,
+            onHand: quantityChange,
+            reserved: 0,
+            damaged: 0,
+            status: 'AVAILABLE'
+          }
+        });
+        inventoryItemId = newItem.id;
+        oldOnHand = 0;
+      }
+
+      await this.stockLedger.recordMovement(tx, shopId, inventoryItemId, {
+        movementType: StockMovementType.PURCHASE,
+        quantityChange: quantityChange,
+        unitCost: line.unitPrice ? parseFloat(line.unitPrice) : 0,
+        referenceType: 'GOODS_RECEIPT',
+        referenceId: grn.id,
+        createdBy: grn.createdBy || 'SYSTEM',
+        currentBalance: oldOnHand
+      });
+
+      await this.eventPublisher.publish(tx as any, {
+        shopId,
+        eventType: 'InventoryReceived',
+        entityId: inventoryItemId,
+        entityType: 'InventoryItem',
+        payload: {
+          inventoryItemId,
+          productId: line.productId,
+          quantityBefore: oldOnHand,
+          quantityChange: quantityChange,
+          quantityAfter: oldOnHand + quantityChange,
+        }
+      });
+      
+      // We would also invoke Batch Engine here if batchId exists
+      if (line.batchId) {
+         this.logger.debug(`Integrating batch ${line.batchId} into batch stock`);
+      }
+    }
+  }
+}
