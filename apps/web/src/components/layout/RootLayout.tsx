@@ -1,10 +1,19 @@
 'use client';
 
 import React from 'react';
+import { usePathname } from 'next/navigation';
 import { Sidebar } from '@/components/navigation/Sidebar';
 import { Navbar } from '@/components/navigation/Navbar';
 
+const AUTH_PATHS = ['/login', '/register'];
+
 export function RootLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isAuthPage = AUTH_PATHS.includes(pathname);
+
+  if (isAuthPage) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen bg-background">

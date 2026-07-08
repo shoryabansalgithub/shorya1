@@ -20,6 +20,9 @@ export class ShopsService {
     const currentOwner = await this.prisma.user.findUnique({ where: { id: currentOwnerId } });
     if (!currentOwner) throw new NotFoundException('Current owner not found');
 
+    if (!currentOwner.password) {
+      throw new ForbiddenException('Ownership transfer requires a password. Google-authenticated owners must set a password first.');
+    }
     const passwordValid = await bcrypt.compare(dto.currentPassword, currentOwner.password);
     if (!passwordValid) throw new ForbiddenException('Invalid password');
 

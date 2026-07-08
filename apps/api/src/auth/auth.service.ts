@@ -23,7 +23,8 @@ export class AuthService {
 
   async validateUser(email: string, pass: string): Promise<SafeUserDto | null> {
     const user = await this.usersService.findByEmailWithPassword(email);
-    if (!user) {
+    // Google OAuth users have no password — they cannot use credentials login.
+    if (!user || !user.password) {
       return null;
     }
 

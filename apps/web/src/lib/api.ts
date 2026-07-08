@@ -1,4 +1,6 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+import type { Session } from 'next-auth';
+import type { JWT } from 'next-auth/jwt';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
@@ -9,41 +11,44 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
-// ━━━ P0 FIX: Unified isomorphic auth injection ━━━
-// Client: uses next-auth/react getSession()
-// Server: uses next-auth/jwt getToken() with request cookies
+// ---------------------------------------------------------------------------
+// Isomorphic token resolution — extracts the NestJS access token from the
+// NextAuth session (client) or JWT cookie (server).
+// ---------------------------------------------------------------------------
 async function resolveToken(): Promise<string | null> {
   if (typeof window !== 'undefined') {
-    // Client-side: use next-auth/react
+    // Client-side — read from NextAuth session
     const { getSession } = await import('next-auth/react');
-    const session = await getSession();
-    return (session as any)?.accessToken ?? null;
-  } else {
-    // Server-side: extract token from NextAuth JWT cookie
-    try {
-      const { cookies } = await import('next/headers');
-      const { getToken } = await import('next-auth/jwt');
-      const cookieStore = await cookies();
-      // Build a minimal request-like object for getToken
-      const req = {
-        cookies: Object.fromEntries(
-          cookieStore.getAll().map((c: any) => [c.name, c.value])
-        ),
-        headers: {},
-      };
-      const token = await getToken({
-        req: req as any,
-        secret: process.env.NEXTAUTH_SECRET,
-      });
-      return (token as any)?.accessToken ?? null;
-    } catch {
-      // If next/headers is unavailable (e.g., build-time), skip silently
-      return null;
+    const session = (await getSession()) as Session | null;
+    return session?.accessToken ?? null;
+  }
+
+  // Server-side — decode the NextAuth JWT cookie directly
+  try {
+    const { cookies } = await import('next/headers');
+    const { getToken } = await import('next-auth/jwt');
+    const cookieStore = await cookies();
+
+    const cookieMap: Record<string, string> = {};
+    for (const c of cookieStore.getAll()) {
+      cookieMap[c.name] = c.value;
     }
+
+    // next-auth v4 getToken types expect IncomingMessage | NextApiRequest |
+    // NextRequest, but at runtime it only accesses req.cookies — the plain
+    // object is compatible at this library boundary.
+    const token = (await getToken({
+      req: { cookies: cookieMap },
+      secret: process.env.NEXTAUTH_SECRET,
+    } as Parameters<typeof getToken>[0])) as JWT | null;
+    return token?.accessToken ?? null;
+  } catch {
+    // next/headers unavailable at build-time — no token to inject
+    return null;
   }
 }
 
-// Add request interceptor
+// ---- Request interceptor — inject Bearer token ----
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     const token = await resolveToken();
@@ -52,21 +57,19 @@ apiClient.interceptors.request.use(
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(error),
 );
 
-// Add response interceptor
+// ---- Response interceptor — auto-signout on 401 ----
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401 && typeof window !== 'undefined') {
-      // Handle unauthorized securely by clearing NextAuth session
       const { signOut } = await import('next-auth/react');
-      signOut({ callbackUrl: '/login' });
+      await signOut({ callbackUrl: '/login' });
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 export default apiClient;
-
