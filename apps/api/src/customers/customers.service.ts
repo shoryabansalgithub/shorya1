@@ -1,7 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-
 import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
+import { CustomerRepository } from './repositories/customer.repository';
+import { CustomerAuditService } from './services/customer-audit.service';
+import { EventPublisherService } from '../events-domain/services/event-publisher.service';
+import { CreateEnterpriseCustomerDto } from './dto/enterprise-customer.dto';
+import { CustomerType, CustomerLifecycleStatus, KycStatus } from './domain/enums';
 
 @Injectable()
 export class CustomersService {
@@ -9,23 +13,45 @@ export class CustomersService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly tenantContext: TenantContextService
+    private readonly tenantContext: TenantContextService,
+    private readonly customerRepository: CustomerRepository,
+    private readonly auditService: CustomerAuditService,
+    private readonly eventPublisher: EventPublisherService
   ) {}
 
-  async create(data: { name: string; phone: string; email?: string; address?: string }) {
+  async create(data: CreateEnterpriseCustomerDto | any) {
     try {
       this.logger.log(`Attempting to create customer: ${data.name}`);
+      const shopId = this.tenantContext.getShopId();
       
-      const newCustomer = await this.prisma.customer.create({
-        data: {
-          name: data.name,
-          phone: data.phone,
-          shopId: undefined as any,
-          email: data.email || null,
-          address: data.address || null,
-          creditLimit: 5000, // strict server default
-          outstandingBalance: 0, // strict server default
-        },
+      const newCustomer = await this.customerRepository.create({
+        name: data.name,
+        phone: data.phone,
+        shop: { connect: { id: shopId } },
+        email: data.email || null,
+        address: data.address || null,
+        creditLimit: 5000,
+        outstandingBalance: 0,
+        type: data.type || CustomerType.RETAIL,
+        lifecycleStatus: data.lifecycleStatus || CustomerLifecycleStatus.LEAD,
+        kycStatus: KycStatus.PENDING,
+        
+        // Connect enterprise relations if provided
+        profile: data.profile ? { create: data.profile } : undefined,
+        addresses: data.addresses?.length ? { create: data.addresses } : undefined,
+        contacts: data.contacts?.length ? { create: data.contacts } : undefined,
+      });
+
+      await this.auditService.logAction({
+        customerId: newCustomer.id,
+        action: 'CUSTOMER_CREATED',
+        newPayload: newCustomer
+      });
+
+      await this.eventPublisher.publish('customer.created', {
+        customerId: newCustomer.id,
+        shopId: shopId,
+        timestamp: new Date().toISOString()
       });
 
       return newCustomer;
@@ -35,11 +61,28 @@ export class CustomersService {
     }
   }
 
-  async findAll() {
+  async findAll(skip?: number, take?: number) {
     const shopId = this.tenantContext.getShopId();
-    return this.prisma.customer.findMany({
-      where: { shopId, isDeleted: false },
-      orderBy: { createdAt: 'desc' }
+    return this.customerRepository.findAll(shopId, skip, take);
+  }
+
+  async findOne(id: string) {
+    const shopId = this.tenantContext.getShopId();
+    const customer = await this.customerRepository.findById(id, shopId);
+    if (!customer) throw new NotFoundException('Customer not found');
+    return customer;
+  }
+
+  async softDelete(id: string) {
+    const shopId = this.tenantContext.getShopId();
+    const deleted = await this.customerRepository.softDelete(id, shopId);
+    
+    await this.auditService.logAction({
+      customerId: id,
+      action: 'CUSTOMER_DELETED'
     });
+
+    await this.eventPublisher.publish('customer.deleted', { customerId: id, shopId });
+    return deleted;
   }
 }

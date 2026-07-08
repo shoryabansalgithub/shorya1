@@ -43,6 +43,53 @@ enum InvoiceStatus {
   CANCELLED
 }
 
+enum CustomerType {
+  RETAIL
+  WHOLESALE
+  DISTRIBUTOR
+  CORPORATE
+  DEALER
+  WALKIN
+  VIP
+  GOVERNMENT
+  EDUCATIONAL
+  HOSPITAL
+  FRANCHISE
+  ONLINE
+}
+
+enum CustomerLifecycleStatus {
+  LEAD
+  PROSPECT
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  BLOCKED
+  ARCHIVED
+}
+
+enum ContactRole {
+  PRIMARY
+  SECONDARY
+  ACCOUNTS
+  PURCHASE
+  SALES
+  SUPPORT
+}
+
+enum AddressType {
+  BILLING
+  SHIPPING
+  OFFICE
+  WAREHOUSE
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
 enum UdharTransactionType {
   CREDIT
   PAYMENT
@@ -870,12 +917,223 @@ model Customer {
   isDeleted          Boolean   @default(false)
   deletedAt          DateTime?
 
+  // Enterprise Extensions
+  type               CustomerType            @default(RETAIL)
+  lifecycleStatus    CustomerLifecycleStatus @default(LEAD)
+  kycStatus          KycStatus               @default(PENDING)
+
   shop              Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict)
   invoices          Invoice[]
   udharTransactions UdharTransaction[]
+  
+  profile           CustomerProfile?
+  addresses         CustomerAddress[]
+  contacts          CustomerContact[]
+  groups            CustomerGroupMember[]
+  categories        CustomerCategoryMember[]
+  customerTags      CustomerTagMember[]
+  documents         CustomerDocument[]
+  audits            CustomerAudit[]
+  statusHistory     CustomerStatusHistory[]
 
   @@unique([shopId, phone, deletedAt])
   @@index([shopId])
+  @@index([shopId, lifecycleStatus])
+  @@index([shopId, type])
+}
+
+model CustomerProfile {
+  id             String   @id @default(cuid())
+  customerId     String   @unique
+  companyName    String?
+  displayName    String?
+  gstin          String?
+  pan            String?
+  businessType   String?
+  registrationNo String?
+  website        String?
+  industry       String?
+  language       String?  @default("en")
+  currency       String?  @default("INR")
+  timezone       String?  @default("Asia/Kolkata")
+  profilePicture String?
+  customFields   Json?
+
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+}
+
+model CustomerAddress {
+  id          String      @id @default(cuid())
+  customerId  String
+  type        AddressType @default(BILLING)
+  isDefault   Boolean     @default(false)
+  addressLine String
+  city        String
+  state       String
+  district    String?
+  country     String      @default("India")
+  postalCode  String
+  latitude    Float?
+  longitude   Float?
+  geoVerified Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+model CustomerContact {
+  id          String      @id @default(cuid())
+  customerId  String
+  role        ContactRole @default(PRIMARY)
+  name        String
+  phone       String
+  email       String?
+  designation String?
+  department  String?
+  notes       String?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+model CustomerGroup {
+  id          String   @id @default(cuid())
+  shopId      String
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isDeleted   Boolean  @default(false)
+  deletedAt   DateTime?
+
+  members     CustomerGroupMember[]
+
+  @@unique([shopId, name, deletedAt])
+}
+
+model CustomerGroupMember {
+  id        String   @id @default(cuid())
+  groupId   String
+  customerId String
+  createdAt DateTime @default(now())
+
+  group    CustomerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  customer Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, customerId])
+}
+
+model CustomerCategory {
+  id          String   @id @default(cuid())
+  shopId      String
+  parentId    String?
+  name        String
+  description String?
+  path        String   @default("/")
+  depth       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isDeleted   Boolean  @default(false)
+  deletedAt   DateTime?
+
+  parent      CustomerCategory?  @relation("SubCategories", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subCategories CustomerCategory[] @relation("SubCategories")
+  members     CustomerCategoryMember[]
+
+  @@unique([shopId, name, deletedAt])
+  @@index([parentId])
+}
+
+model CustomerCategoryMember {
+  id         String   @id @default(cuid())
+  categoryId String
+  customerId String
+  createdAt  DateTime @default(now())
+
+  category CustomerCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  customer Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, customerId])
+}
+
+model CustomerTag {
+  id          String   @id @default(cuid())
+  shopId      String
+  name        String
+  color       String   @default("#000000")
+  priority    Int      @default(0)
+  isDynamic   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     CustomerTagMember[]
+
+  @@unique([shopId, name])
+}
+
+model CustomerTagMember {
+  id         String   @id @default(cuid())
+  tagId      String
+  customerId String
+  createdAt  DateTime @default(now())
+
+  tag      CustomerTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  customer Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([tagId, customerId])
+}
+
+model CustomerDocument {
+  id           String   @id @default(cuid())
+  customerId   String
+  documentType String   // GST, PAN, CONTRACT, etc.
+  fileUrl      String
+  metadata     Json?
+  verified     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+model CustomerAudit {
+  id              String   @id @default(cuid())
+  customerId      String
+  actorId         String?  // system or user
+  action          String
+  previousPayload Json?
+  newPayload      Json?
+  ipAddress       String?
+  createdAt       DateTime @default(now())
+
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([createdAt])
+}
+
+model CustomerStatusHistory {
+  id         String                  @id @default(cuid())
+  customerId String
+  status     CustomerLifecycleStatus
+  actorId    String?
+  reason     String?
+  createdAt  DateTime                @default(now())
+
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
 }
 
 model Shift {
