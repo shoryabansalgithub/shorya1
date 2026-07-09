@@ -48,10 +48,15 @@ export class CustomersService {
         newPayload: newCustomer
       });
 
-      await this.eventPublisher.publish('customer.created', {
-        customerId: newCustomer.id,
-        shopId: shopId,
-        timestamp: new Date().toISOString()
+      await this.eventPublisher.publish(this.prisma, shopId, {
+        type: 'customer.created',
+        entityType: 'Customer',
+        entityId: newCustomer.id,
+        payload: {
+          customerId: newCustomer.id,
+          shopId: shopId,
+          timestamp: new Date().toISOString()
+        }
       });
 
       return newCustomer;
@@ -82,7 +87,12 @@ export class CustomersService {
       action: 'CUSTOMER_DELETED'
     });
 
-    await this.eventPublisher.publish('customer.deleted', { customerId: id, shopId });
+    await this.eventPublisher.publish(this.prisma, shopId, {
+      type: 'customer.deleted',
+      entityType: 'Customer',
+      entityId: id,
+      payload: { customerId: id, shopId }
+    });
     return deleted;
   }
 }
