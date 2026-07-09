@@ -14,6 +14,7 @@ import { UsersService } from '../users/users.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { SafeUserDto } from '../users/dto/safe-user.dto';
 import type { Request as ExpressRequest } from 'express';
+import { GoogleAuthDto } from './dto/google-auth.dto';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: SafeUserDto;
@@ -53,6 +54,25 @@ export class AuthController {
   @ApiOperation({ summary: 'Login with email and password' })
   async login(@Request() req: AuthenticatedRequest, @Ip() ip: string, @Headers('user-agent') userAgent: string): Promise<LoginResponseDto> {
     return this.authService.login(req.user, ip, userAgent);
+  }
+
+  @Public()
+  @Throttle({ short: { limit: 5, ttl: 1000 }, medium: { limit: 15, ttl: 10000 }, long: { limit: 30, ttl: 30000 } })
+  @Post('google')
+  @ApiOperation({ summary: 'Authenticate or register via Google OAuth' })
+  @ApiBody({ type: GoogleAuthDto })
+  @ApiResponse({ status: 200, type: SafeUserDto })
+  async googleAuth(
+    @Body() body: GoogleAuthDto,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string,
+  ): Promise<LoginResponseDto> {
+    const user = await this.usersService.findOrCreateGoogleUser(
+      body.googleId,
+      body.email,
+      body.name,
+    );
+    return this.authService.login(user, ip, userAgent);
   }
 
   @Get('sessions')

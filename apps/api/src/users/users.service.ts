@@ -89,6 +89,89 @@ export class UsersService {
     }
   }
 
+  /**
+   * Provision a user from Google OAuth.
+   *
+   * Resolution order:
+   * 1. Existing user matched by googleId → return immediately
+   * 2. Existing user matched by email → link googleId and return (account linking)
+   * 3. New user → create user + shop in a transaction, role = OWNER
+   *
+   * Google users have no password set; they authenticate exclusively via OAuth.
+   */
+  async findOrCreateGoogleUser(
+    googleId: string,
+    email: string,
+    name: string,
+  ): Promise<SafeUserDto> {
+    // 1. Match by Google ID — returning user
+    const byGoogle = await this.prisma.user.findUnique({
+      where: { googleId },
+      select: safeUserSelect,
+    });
+    if (byGoogle) return UserMapper.toSafeUserDto(byGoogle);
+
+    // 2. Match by email — account linking for existing password users
+    const byEmail = await this.prisma.user.findUnique({
+      where: { email },
+      select: safeUserSelect,
+    });
+    if (byEmail) {
+      const updated = await this.prisma.user.update({
+        where: { id: byEmail.id },
+        data: { googleId },
+        select: safeUserSelect,
+      });
+      this.logger.log(`Linked Google account to existing user ${byEmail.id}`);
+      return UserMapper.toSafeUserDto(updated);
+    }
+
+    // 3. New user — create user + shop atomically
+    const userId = crypto.randomUUID();
+    const shopId = crypto.randomUUID();
+
+    try {
+      const user: SafeUserRecord = await this.prisma.$transaction(async (tx) => {
+        await tx.shop.create({
+          data: {
+            id: shopId,
+            name: `${name}'s Shop`,
+            ownerId: userId,
+          },
+        });
+
+        return tx.user.create({
+          data: {
+            id: userId,
+            email,
+            name,
+            googleId,
+            role: Role.OWNER,
+            shopId,
+          },
+          select: safeUserSelect,
+        });
+      });
+
+      this.logger.log(`Created new Google OAuth user ${userId}`);
+      return UserMapper.toSafeUserDto(user);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        // Race: another request created the user between our lookups
+        const retry = await this.prisma.user.findUnique({
+          where: { email },
+          select: safeUserSelect,
+        });
+        if (retry) return UserMapper.toSafeUserDto(retry);
+      }
+      this.logger.error('Failed to create Google OAuth user', error);
+      throw error;
+    }
+  }
+
   async incrementFailedAttempts(userId: string): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
