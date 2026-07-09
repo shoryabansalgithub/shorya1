@@ -10,7 +10,7 @@ import { Modal } from '@/components/ui/Modal';
 import { SlidingPanel } from '@/components/ui/SlidingPanel';
 import { useToast } from '@/components/ui/Toast';
 import { AnimatePresence, motion } from 'framer-motion';
-
+import { inventoryApi } from '@/lib/api-client';
 // Mock Inventory Batch Data
 const MOCK_BATCHES = [
   { id: 'B101', product: 'Maggi Masala Noodles', sku: 'MGG001', batchNo: 'BAT-2601A', mfgDate: '2026-01-10', expDate: '2026-07-10', quantity: 150, supplier: 'Delhi Wholesale Mart' },
@@ -22,7 +22,15 @@ const MOCK_BATCHES = [
 
 export default function InventoryPage() {
   const { toast } = useToast();
-  const [batches, setBatches] = useState(MOCK_BATCHES);
+  const [batches, setBatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    inventoryApi.listBatches()
+      .then(data => { setBatches(data.length ? data : MOCK_BATCHES); })
+      .catch(() => { setBatches(MOCK_BATCHES); })
+      .finally(() => setLoading(false));
+  }, []);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modals & Panels
@@ -113,6 +121,7 @@ export default function InventoryPage() {
         break;
     }
   };
+  if (loading) return <div className="p-12 text-center text-gray-500">Loading inventory batches...</div>;
 
   return (
     <div className="space-y-6">

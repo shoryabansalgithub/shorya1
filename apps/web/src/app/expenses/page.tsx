@@ -9,6 +9,7 @@ import {
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { AnimatePresence, motion } from 'framer-motion';
+import { expensesApi } from '@/lib/api-client';
 
 // Mock Expenses Data
 const MOCK_EXPENSES = [
@@ -30,7 +31,15 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 export default function ExpensesPage() {
   const { toast } = useToast();
-  const [expenses, setExpenses] = useState(MOCK_EXPENSES);
+  const [expenses, setExpenses] = useState(MOCK_EXPENSES as Array<{ id: string; category: string; amount: number; description: string; status: string; date: string; mode: string; icon: any }>);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    expensesApi.list()
+      .then(data => { if (Array.isArray(data) && data.length > 0) setExpenses(data as typeof MOCK_EXPENSES); })
+      .catch(() => { /* keep mock data */ })
+      .finally(() => setLoading(false));
+  }, []);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modals & Panels
@@ -68,7 +77,7 @@ export default function ExpensesPage() {
   const pendingExpenses = expenses.filter(e => e.status === 'Pending').reduce((acc, curr) => acc + curr.amount, 0);
   
   // Group by category to find largest
-  const categoryTotals = expenses.reduce((acc, curr) => {
+  const categoryTotals = expenses.reduce((acc: Record<string, number>, curr) => {
     acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
     return acc;
   }, {} as Record<string, number>);
@@ -138,6 +147,7 @@ export default function ExpensesPage() {
         break;
     }
   };
+  if (loading) return <div className="p-12 text-center text-gray-500">Loading expenses...</div>;
 
   return (
     <div className="space-y-6">

@@ -10,7 +10,7 @@ import { Modal } from '@/components/ui/Modal';
 import { SlidingPanel } from '@/components/ui/SlidingPanel';
 import { useToast } from '@/components/ui/Toast';
 import { AnimatePresence, motion } from 'framer-motion';
-
+import { suppliersApi } from '@/lib/api-client';
 // Mock Suppliers Data
 const MOCK_SUPPLIERS = [
   { id: '1', name: 'Delhi Wholesale Mart', contactPerson: 'Rajeev Sharma', phone: '9876543211', pendingPayables: 45000, lastDelivery: '2026-05-18', status: 'Active' },
@@ -22,7 +22,15 @@ const MOCK_SUPPLIERS = [
 
 export default function SuppliersPage() {
   const { toast } = useToast();
-  const [suppliers, setSuppliers] = useState(MOCK_SUPPLIERS);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    suppliersApi.list()
+      .then(data => { setSuppliers(data.length ? data : MOCK_SUPPLIERS); })
+      .catch(() => { setSuppliers(MOCK_SUPPLIERS); })
+      .finally(() => setLoading(false));
+  }, []);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modals & Panels
@@ -149,6 +157,7 @@ export default function SuppliersPage() {
         break;
     }
   };
+  if (loading) return <div className="p-12 text-center text-gray-500">Loading suppliers...</div>;
 
   return (
     <div className="space-y-6">

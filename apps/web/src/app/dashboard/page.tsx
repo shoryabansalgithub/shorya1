@@ -10,7 +10,7 @@ import { Card } from '@/components/ui/Card';
 import { useRouter } from 'next/navigation';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
-import { mockProducts } from '@/data/mockData';
+import { productsApi } from '@/lib/api-client';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Dummy static charts for UI purposes to perfectly match the screenshot without complex chart setups
@@ -72,6 +72,9 @@ export default function DashboardPage() {
   const timeDropdownRef = useRef<HTMLDivElement>(null);
 
   const [customers, setCustomers] = useState<any[]>([]);
+  const [products, setProducts] = useState<Awaited<ReturnType<typeof productsApi.list>>>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -80,8 +83,23 @@ export default function DashboardPage() {
   const [newUdhar, setNewUdhar] = useState('0');
 
   useEffect(() => {
+    fetchProducts();
     fetchCustomers();
   }, []);
+  
+  const fetchProducts = async () => {
+    try {
+      setProductsLoading(true);
+      setProductsError(null);
+      const data = await productsApi.list();
+      setProducts(data);
+    } catch (err) {
+      console.error('Error fetching products', err);
+      setProductsError('Failed to load products.');
+    } finally {
+      setProductsLoading(false);
+    }
+  };
 
   const fetchCustomers = async () => {
     try {
@@ -162,10 +180,35 @@ export default function DashboardPage() {
     }
   };
 
-  const filteredProducts = mockProducts.filter(p => 
+  const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
     p.sku.toLowerCase().includes(productSearch.toLowerCase())
   ).slice(0, 5);
+  
+  if (productsLoading) {
+    return (
+      <div className="space-y-6">
+        <p className="text-sm text-gray-500">Loading products...</p>
+      </div>
+    );
+  }
+  
+  if (productsError) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-600">
+          <AlertCircle size={16} className="flex-shrink-0" />
+          <span>{productsError}</span>
+          <button
+            onClick={fetchProducts}
+            className="ml-auto rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

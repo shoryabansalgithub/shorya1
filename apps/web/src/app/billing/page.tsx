@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Search, Plus, Mic, Receipt, IndianRupee, Minus, CheckCircle2, ArrowRight } from 'lucide-react';
-import { mockProducts, mockCustomers } from '@/data/mockData';
+import { productsApi, customersApi } from '@/lib/api-client';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { motion } from 'framer-motion';
@@ -16,9 +16,12 @@ function BillingContent() {
   const router = useRouter();
 
   const [cart, setCart] = useState<{product: any, qty: number}[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
   const [search, setSearch] = useState('');
-  const [customers] = useState(mockCustomers);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   
   // Right Sidebar State
   const [manualTotal, setManualTotal] = useState<string>('');
@@ -35,26 +38,57 @@ function BillingContent() {
   // ENG-401: Persistent Idempotency Key
   const { key: idempotencyKey, clearKey } = useIdempotencyKey('new-bill');
 
+  const fetchBillingData = async () => {
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      const [productsData, customersData] = await Promise.all([
+        productsApi.list(),
+        customersApi.list(),
+      ]);
+
+      setProducts(productsData);
+      setCustomers(
+        customersData.map((customer: any) => ({
+          ...customer,
+          udharAmount: customer.udharAmount ?? customer.outstandingUdhar ?? 0,
+          totalSpent: customer.totalSpent ?? customer.totalPurchases ?? 0,
+        }))
+      );
+    } catch {
+      setLoadError('Failed to load billing data.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBillingData();
+  }, []);
+
   // Handle URL query parameters for AI Voice Billing
   useEffect(() => {
+    if (products.length === 0) return;
+
     const addItem = searchParams.get('addItem');
     const qty = Number(searchParams.get('qty')) || 1;
     const productId = searchParams.get('product');
 
     if (addItem) {
-      const product = mockProducts.find(p => p.name.toLowerCase().includes(addItem.toLowerCase()));
+      const product = products.find(p => p.name.toLowerCase().includes(addItem.toLowerCase()));
       if (product) {
         addToCart(product, qty);
       }
     }
     
     if (productId) {
-      const product = mockProducts.find(p => p.id === productId);
+      const product = products.find(p => p.id === productId);
       if (product) {
         addToCart(product, 1);
       }
     }
-  }, [searchParams]);
+  }, [products, searchParams]);
 
   // Sync cart total to manualTotal when cart changes
   const cartTotal = cart.reduce((acc, item) => acc + (item.product.price * item.qty), 0);
@@ -172,7 +206,7 @@ function BillingContent() {
     setTimeout(() => {
       setIsListening(false);
       setIsVoiceModalOpen(false);
-      const p = mockProducts.find(p => p.name.includes('Maggi'));
+      const p = products.find(p => p.name.includes('Maggi'));
       if (p) {
         addToCart(p, 2);
         toast('Heard: Add 2 Maggi Noodles → Added to cart', 'success');
@@ -180,7 +214,35 @@ function BillingContent() {
     }, 2000);
   };
 
-  const filteredProducts = mockProducts.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6 max-w-[1400px] mx-auto">
+        <Card className="p-6 bg-white border border-gray-100 shadow-sm rounded-xl">
+          <p className="text-sm font-medium text-gray-500">Loading billing data...</p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-6 max-w-[1400px] mx-auto">
+        <Card className="p-6 bg-white border border-gray-100 shadow-sm rounded-xl">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm font-medium text-red-500">{loadError}</p>
+            <button
+              onClick={fetchBillingData}
+              className="bg-[#8B5CF6] hover:bg-[#7C3AED] text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">

@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/Modal';
 import { SlidingPanel } from '@/components/ui/SlidingPanel';
 import { useToast } from '@/components/ui/Toast';
 import { AnimatePresence, motion } from 'framer-motion';
+import { employeesApi } from '@/lib/api-client';
 
 // Mock Employees Data
 const MOCK_EMPLOYEES = [
@@ -35,7 +36,15 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function EmployeesPage() {
   const { toast } = useToast();
-  const [employees, setEmployees] = useState(MOCK_EMPLOYEES);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    employeesApi.list()
+      .then(data => { setEmployees(data.length ? data : MOCK_EMPLOYEES); })
+      .catch(() => { setEmployees(MOCK_EMPLOYEES); })
+      .finally(() => setLoading(false));
+  }, []);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modals & Panels
@@ -170,6 +179,7 @@ export default function EmployeesPage() {
         break;
     }
   };
+  if (loading) return <div className="p-12 text-center text-gray-500">Loading employees...</div>;
 
   return (
     <div className="space-y-6">
