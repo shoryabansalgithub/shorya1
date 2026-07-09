@@ -1,17 +1,20 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Card } from '@/components/ui/Card';
 import { 
   Camera, X, Zap, Image as ImageIcon, ScanLine, FileText, CheckCircle2, 
   User, UploadCloud, Database, HardDrive, ShieldCheck
 } from 'lucide-react';
-import { mockCustomers } from '@/data/mockData';
+import { customersApi } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
+import type { Customer } from '@/types';
 import { useRouter } from 'next/navigation';
 
 export default function SmartCapturePage() {
-  const [customers] = useState(mockCustomers);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
   const { toast } = useToast();
   const router = useRouter();
@@ -26,6 +29,26 @@ export default function SmartCapturePage() {
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fetchCustomers = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await customersApi.list();
+      setCustomers(data);
+    } catch (err) {
+      console.error('Error fetching customers', err);
+      setCustomers([]);
+      setError('Could not load customers. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchCustomers();
+  }, []);
+
 
   const selectFolder = async () => {
     try {
@@ -122,6 +145,28 @@ export default function SmartCapturePage() {
       closeCamera();
     }, 2000);
   };
+  if (loading) {
+    return (
+      <div className="p-8 flex justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#3b82f6]" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-sm font-medium text-gray-800">Unable to load customers</p>
+        <p className="mt-1 text-xs text-gray-500">{error}</p>
+        <button
+          onClick={() => void fetchCustomers()}
+          className="mt-4 rounded-xl bg-[#3b82f6] px-4 py-2 text-sm font-bold text-white transition-all hover:bg-[#2563eb]"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-8 pb-10">

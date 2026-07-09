@@ -6,21 +6,25 @@ import {
   PackageSearch, Plus, Search, Filter, MoreVertical, 
   AlertTriangle, ChevronDown, PackageOpen, Box, TrendingUp, IndianRupee 
 } from 'lucide-react';
-import { mockProducts } from '@/data/mockData';
 import { Modal } from '@/components/ui/Modal';
 import { SlidingPanel } from '@/components/ui/SlidingPanel';
 import { useToast } from '@/components/ui/Toast';
+import { productsApi } from '@/lib/api-client';
+import apiClient from '@/lib/api';
+import type { Product } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export default function ProductsPage() {
   const { toast } = useToast();
-  const [products, setProducts] = useState(mockProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Modals & Panels
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState('Details');
 
   // Dropdowns
@@ -32,8 +36,79 @@ export default function ProductsPage() {
   // Filters & Sorting
   const [statusFilter, setStatusFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
+
+  // Form State
+  const [newName, setNewName] = useState('');
+  const [newSKU, setNewSKU] = useState('');
+  const [newCategory, setNewCategory] = useState('');
+  const [newPrice, setNewPrice] = useState('');
+  const [newCost, setNewCost] = useState('');
+  const [newQty, setNewQty] = useState('');
   
   const categories = ['All', ...Array.from(new Set(products.map(p => p.category)))];
+
+  const fetchProducts = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const data = await productsApi.list();
+      setProducts(data);
+    } catch {
+      setError('Failed to load products.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resolveCategoryId = async (categoryName: string) => {
+    const trimmedCategory = categoryName.trim();
+
+    if (!trimmedCategory) {
+      return undefined;
+    }
+
+    const { data: categories } = await apiClient.get<Array<{ id: string; name: string }>>('/categories');
+    const existingCategory = categories.find(
+      (category) => category.name.toLowerCase() === trimmedCategory.toLowerCase()
+    );
+
+    if (existingCategory) {
+      return existingCategory.id;
+    }
+
+    const { data: createdCategory } = await apiClient.post<{ id: string }>('/categories', {
+      name: trimmedCategory,
+    });
+
+    return createdCategory.id;
+  };
+
+  const applyInitialStock = async (productId: string, quantity: number) => {
+    if (quantity <= 0) {
+      return;
+    }
+
+    const { data: inventoryItem } = await apiClient.post<{ id: string }>('/inventory-domain', { productId });
+
+    await apiClient.post(`/inventory-domain/${inventoryItem.id}/adjust`, {
+      reason: 'OPENING_BALANCE',
+      quantityChange: quantity,
+      notes: 'Opening stock from Products page',
+    });
+  };
+
+  const resetProductForm = () => {
+    setNewName('');
+    setNewSKU('');
+    setNewCategory('');
+    setNewPrice('');
+    setNewCost('');
+    setNewQty('');
+  };
+
+  useEffect(() => {
+    void fetchProducts();
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -45,19 +120,22 @@ export default function ProductsPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Form State
-  const [newName, setNewName] = useState('');
-  const [newSKU, setNewSKU] = useState('');
-  const [newCategory, setNewCategory] = useState('');
-  const [newPrice, setNewPrice] = useState('');
-  const [newCost, setNewCost] = useState('');
-  const [newQty, setNewQty] = useState('');
-
   // Derived Stats
   const totalProducts = products.length;
   const lowStockCount = products.filter(p => p.quantity <= 15 && p.quantity > 0).length;
   const outOfStockCount = products.filter(p => p.quantity === 0).length;
   const totalValue = products.reduce((acc, curr) => acc + (curr.cost * curr.quantity), 0);
+  const renderStatValue = (value: number | string) => {
+    if (isLoading) {
+      return <div className="mt-1 h-6 w-16 rounded-md bg-gray-200 animate-pulse" />;
+    }
+
+    if (error) {
+      return <h3 className="text-xl font-bold text-gray-400 tracking-tight">—</h3>;
+    }
+
+    return <h3 className="text-xl font-bold text-gray-800 tracking-tight">{value}</h3>;
+  };
 
   // Filter Logic
   let processedProducts = products.filter(p => 
@@ -76,29 +154,49 @@ export default function ProductsPage() {
     });
   }
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim() || !newPrice) return;
-    
-    const newProduct = {
-      id: Date.now().toString(),
-      name: newName,
-      sku: newSKU || `SKU-${Math.floor(Math.random() * 1000)}`,
-      category: newCategory || 'General',
-      price: Number(newPrice),
-      cost: Number(newCost) || Number(newPrice) * 0.8,
-      quantity: Number(newQty) || 0,
-      description: 'Newly added product'
-    };
-    
-    setProducts([newProduct, ...products]);
-    toast('Product added successfully', 'success');
-    setIsAddModalOpen(false);
-    
-    setNewName(''); setNewSKU(''); setNewCategory(''); setNewPrice(''); setNewCost(''); setNewQty('');
+
+    const initialQuantity = Number(newQty) || 0;
+
+    try {
+      const categoryId = await resolveCategoryId(newCategory);
+      const createdProduct = await productsApi.create({
+        name: newName.trim(),
+        sku: newSKU.trim() || `SKU-${Math.floor(Math.random() * 1000)}`,
+        sellingPrice: Number(newPrice),
+        costPrice: Number(newCost) || Number(newPrice) * 0.8,
+        mrp: Number(newPrice),
+        categoryId,
+      });
+
+      let stockAdjusted = true;
+      try {
+        await applyInitialStock(createdProduct.id, initialQuantity);
+      } catch {
+        stockAdjusted = false;
+      }
+
+      const savedProduct = await productsApi.get(createdProduct.id).catch(() => ({
+        ...createdProduct,
+        category: newCategory.trim() || createdProduct.category,
+        quantity: stockAdjusted && initialQuantity > 0 ? initialQuantity : createdProduct.quantity,
+      }));
+
+      setProducts((currentProducts) => [savedProduct, ...currentProducts]);
+      toast(
+        stockAdjusted ? 'Product added successfully' : 'Product added, but initial stock could not be set.',
+        stockAdjusted ? 'success' : 'info'
+      );
+      setIsAddModalOpen(false);
+      resetProductForm();
+    } catch {
+      toast('Failed to save product', 'error');
+    }
   };
 
-  const handleAction = (action: string, product: any, e: React.MouseEvent) => {
+  const handleAction = async (action: string, product: Product, e: React.MouseEvent) => {
     e.stopPropagation();
     setOpenActionMenuId(null);
     setSelectedProduct(product);
@@ -114,8 +212,13 @@ export default function ProductsPage() {
         toast(`Edit modal for ${product.name} coming soon`, 'info');
         break;
       case 'Delete':
-        setProducts(products.filter(p => p.id !== product.id));
-        toast(`${product.name} deleted successfully`, 'success');
+        try {
+          await productsApi.delete(product.id);
+          setProducts((currentProducts) => currentProducts.filter((currentProduct) => currentProduct.id !== product.id));
+          toast(`${product.name} deleted successfully`, 'success');
+        } catch {
+          toast(`Failed to delete ${product.name}`, 'error');
+        }
         break;
     }
   };
@@ -145,7 +248,7 @@ export default function ProductsPage() {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Total Products</p>
-            <h3 className="text-xl font-bold text-gray-800 tracking-tight">{totalProducts}</h3>
+            {renderStatValue(totalProducts)}
           </div>
         </Card>
         <Card className="p-5 flex items-center gap-4 hoverable">
@@ -154,7 +257,7 @@ export default function ProductsPage() {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Low Stock Alerts</p>
-            <h3 className="text-xl font-bold text-gray-800 tracking-tight">{lowStockCount}</h3>
+            {renderStatValue(lowStockCount)}
           </div>
         </Card>
         <Card className="p-5 flex items-center gap-4 hoverable">
@@ -163,7 +266,7 @@ export default function ProductsPage() {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Out of Stock</p>
-            <h3 className="text-xl font-bold text-gray-800 tracking-tight">{outOfStockCount}</h3>
+            {renderStatValue(outOfStockCount)}
           </div>
         </Card>
         <Card className="p-5 flex items-center gap-4 hoverable">
@@ -172,7 +275,7 @@ export default function ProductsPage() {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Inventory Value</p>
-            <h3 className="text-xl font-bold text-gray-800 tracking-tight">₹{totalValue.toLocaleString('en-IN')}</h3>
+            {renderStatValue(`₹${totalValue.toLocaleString('en-IN')}`)}
           </div>
         </Card>
       </div>
@@ -254,87 +357,120 @@ export default function ProductsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {processedProducts.map((product) => {
-                const isOutOfStock = product.quantity === 0;
-                const isLowStock = product.quantity > 0 && product.quantity <= 15;
-                const status = isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock';
-                
-                return (
-                  <tr 
-                    key={product.id} 
-                    onClick={() => { setSelectedProduct(product); setIsSidePanelOpen(true); }}
-                    className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
-                          <Box size={20} />
-                        </div>
-                        <div>
-                          <span className="font-bold text-gray-800 block">{product.name}</span>
-                          <span className="text-xs text-gray-500 font-mono mt-0.5 block">{product.sku}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 font-medium text-gray-600">{product.category}</td>
-                    <td className="px-6 py-4 font-bold text-gray-800">₹{product.price}</td>
-                    <td className="px-6 py-4 font-bold text-gray-800">{product.quantity}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                        isOutOfStock ? 'bg-red-50 text-red-600' :
-                        isLowStock ? 'bg-orange-50 text-orange-600' :
-                        'bg-green-50 text-green-600'
-                      }`}>
-                        {status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right relative">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === product.id ? null : product.id); }}
-                        className="p-2 text-gray-400 hover:text-[#8B5CF6] transition-colors rounded-lg hover:bg-[#8B5CF6]/10"
-                      >
-                        <MoreVertical size={18} />
-                      </button>
-
-                      <AnimatePresence>
-                        {openActionMenuId === product.id && (
-                          <motion.div 
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="absolute right-8 top-10 w-48 bg-white border border-gray-100 shadow-xl rounded-xl z-50 overflow-hidden text-left"
-                          >
-                            {['View Details', 'Update Stock', 'Edit Product'].map(action => (
-                              <button 
-                                key={action}
-                                onClick={(e) => handleAction(action, product, e)}
-                                className="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 font-medium transition-colors"
-                              >
-                                {action}
-                              </button>
-                            ))}
-                            <div className="h-px bg-gray-100 w-full" />
-                            <button 
-                              onClick={(e) => handleAction('Delete', product, e)}
-                              className="w-full text-left px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 font-bold transition-colors"
-                            >
-                              Delete
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </td>
-                  </tr>
-                );
-              })}
-              {processedProducts.length === 0 && (
+              {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                    <Box className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-                    <p className="font-medium text-gray-800">No products found</p>
-                    <p className="text-xs mt-1">Try adjusting your filters or search.</p>
+                  <td colSpan={6} className="px-6 py-16">
+                    <div className="flex flex-col items-center gap-3 text-center">
+                      <div className="h-8 w-8 rounded-full border-2 border-[#8B5CF6]/20 border-t-[#8B5CF6] animate-spin" />
+                      <div>
+                        <p className="font-medium text-gray-800">Loading products...</p>
+                        <p className="mt-1 text-xs text-gray-500">Fetching your latest inventory data.</p>
+                      </div>
+                    </div>
                   </td>
                 </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-16">
+                    <div className="flex flex-col items-center gap-4 text-center">
+                      <div>
+                        <p className="font-medium text-gray-800">{error}</p>
+                        <p className="mt-1 text-xs text-gray-500">Please try again.</p>
+                      </div>
+                      <button
+                        onClick={() => void fetchProducts()}
+                        className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs font-bold text-red-600 transition-colors hover:bg-red-100"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                <>
+                  {processedProducts.map((product) => {
+                    const isOutOfStock = product.quantity === 0;
+                    const isLowStock = product.quantity > 0 && product.quantity <= 15;
+                    const status = isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock';
+                    
+                    return (
+                      <tr 
+                        key={product.id} 
+                        onClick={() => { setSelectedProduct(product); setIsSidePanelOpen(true); }}
+                        className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
+                              <Box size={20} />
+                            </div>
+                            <div>
+                              <span className="font-bold text-gray-800 block">{product.name}</span>
+                              <span className="text-xs text-gray-500 font-mono mt-0.5 block">{product.sku}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 font-medium text-gray-600">{product.category}</td>
+                        <td className="px-6 py-4 font-bold text-gray-800">₹{product.price}</td>
+                        <td className="px-6 py-4 font-bold text-gray-800">{product.quantity}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                            isOutOfStock ? 'bg-red-50 text-red-600' :
+                            isLowStock ? 'bg-orange-50 text-orange-600' :
+                            'bg-green-50 text-green-600'
+                          }`}>
+                            {status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right relative">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === product.id ? null : product.id); }}
+                            className="p-2 text-gray-400 hover:text-[#8B5CF6] transition-colors rounded-lg hover:bg-[#8B5CF6]/10"
+                          >
+                            <MoreVertical size={18} />
+                          </button>
+
+                          <AnimatePresence>
+                            {openActionMenuId === product.id && (
+                              <motion.div 
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className="absolute right-8 top-10 w-48 bg-white border border-gray-100 shadow-xl rounded-xl z-50 overflow-hidden text-left"
+                              >
+                                {['View Details', 'Update Stock', 'Edit Product'].map(action => (
+                                  <button 
+                                    key={action}
+                                    onClick={(e) => handleAction(action, product, e)}
+                                    className="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 font-medium transition-colors"
+                                  >
+                                    {action}
+                                  </button>
+                                ))}
+                                <div className="h-px bg-gray-100 w-full" />
+                                <button 
+                                  onClick={(e) => handleAction('Delete', product, e)}
+                                  className="w-full text-left px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 font-bold transition-colors"
+                                >
+                                  Delete
+                                </button>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {processedProducts.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                        <Box className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                        <p className="font-medium text-gray-800">No products found</p>
+                        <p className="text-xs mt-1">Try adjusting your filters or search.</p>
+                      </td>
+                    </tr>
+                  )}
+                </>
               )}
             </tbody>
           </table>

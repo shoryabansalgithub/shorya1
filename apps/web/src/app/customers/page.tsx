@@ -7,53 +7,63 @@ import { Search, UserPlus, Calendar as CalendarIcon, Filter, MoreVertical, India
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { SlidingPanel } from '@/components/ui/SlidingPanel';
-import { mockCustomers } from '@/data/mockData';
+import { customersApi } from '@/lib/api-client';
+import type { Customer } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
+
+type CustomerRecord = Customer & {
+  outstandingUdhar?: number;
+  creditBalance?: number;
+  totalPurchases?: number;
+  lastPurchaseAt?: string | null;
+};
+
+function normalizeCustomer(customer: CustomerRecord): Customer {
+  return {
+    ...customer,
+    phone: customer.phone ?? '',
+    email: customer.email ?? '',
+    address: customer.address ?? '',
+    udharAmount: Number(customer.udharAmount ?? customer.outstandingUdhar ?? customer.creditBalance ?? 0),
+    totalSpent: Number(customer.totalSpent ?? customer.totalPurchases ?? 0),
+    lastPurchase: customer.lastPurchase ?? customer.lastPurchaseAt ?? undefined,
+  };
+}
 
 export default function CustomersPage() {
   const router = useRouter();
   const { toast } = useToast();
   
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [, setIsLoading] = useState(true);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const fetchCustomers = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const data = await customersApi.list();
+      setCustomers(data.map(normalizeCustomer));
+    } catch (err) {
+      console.error('Error fetching customers', err);
+      setCustomers([]);
+      setError('Could not load customers. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchCustomers = async () => {
-      try {
-        const res = await fetch('http://localhost:3002/api/customers');
-        if (res.ok) {
-          const data = await res.json();
-          const mappedData = data.map((c: any) => ({
-            id: c.id,
-            name: c.name,
-            phone: c.phone,
-            email: c.email || '',
-            address: c.address || '',
-            udharAmount: Number(c.outstandingBalance) || 0,
-            totalSpent: Number(c.totalPurchases) || 0,
-            lastPurchase: c.lastPurchaseAt || null,
-          }));
-          setCustomers(mappedData.length > 0 ? mappedData : mockCustomers);
-        } else {
-          setCustomers(mockCustomers);
-          console.error("Failed to fetch from API, using mock data");
-        }
-      } catch (err) {
-        setCustomers(mockCustomers);
-        console.error("Error fetching customers, using mock data", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchCustomers();
+    void fetchCustomers();
   }, []);
   
   // Modals & Panels
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [activeTab, setActiveTab] = useState('Details');
 
   // Dropdowns
@@ -114,41 +124,30 @@ export default function CustomersPage() {
   const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim() || !newPhone.trim()) return;
-    
-    const udharAmount = Number(newUdhar) || 0;
-    const creditLimitAmount = Number(newCreditLimit) || 5000;
-    
+
     try {
-      // Connect to the NestJS API
-      const response = await fetch('http://localhost:3002/api/customers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newName,
-          phone: newPhone,
-          email: newEmail,
-          address: newAddress,
-          udharAmount: udharAmount,
-          creditLimit: creditLimitAmount,
-          shopId: 'default-shop-id' // Temporary fallback to satisfy Prisma constraint
+      const createdCustomer = normalizeCustomer(
+        await customersApi.create({
+          name: newName.trim(),
+          phone: newPhone.trim(),
+          email: newEmail.trim() || undefined,
+          address: newAddress.trim() || undefined,
         })
-      });
+      );
 
-      if (!response.ok) {
-        throw new Error('Failed to create customer in backend');
-      }
-
-      const createdCustomer = await response.json();
-      
-      // Update local state to reflect the change visually
-      setCustomers([createdCustomer, ...customers]);
-      toast('Customer added to MySQL database successfully!', 'success');
+      setCustomers((current) => [createdCustomer, ...current]);
+      toast('Customer added successfully!', 'success');
       setIsAddModalOpen(false);
-      
-      setNewName(''); setNewPhone(''); setNewEmail(''); setNewAddress(''); setNewCreditLimit('5000'); setNewUdhar('');
+
+      setNewName('');
+      setNewPhone('');
+      setNewEmail('');
+      setNewAddress('');
+      setNewCreditLimit('5000');
+      setNewUdhar('');
     } catch (error: any) {
       console.error('Error saving customer:', error);
-      toast(`Error saving customer: ${error.message}`, 'error');
+      toast(`Error saving customer: ${error.message ?? 'Please try again.'}`, 'error');
     }
   };
 
@@ -158,7 +157,7 @@ export default function CustomersPage() {
     setIsPaymentModalOpen(false);
   };
 
-  const handleAction = (action: string, customer: any, e: React.MouseEvent) => {
+  const handleAction = (action: string, customer: Customer, e: React.MouseEvent) => {
     e.stopPropagation();
     setOpenActionMenuId(null);
     setSelectedCustomer(customer);
@@ -298,103 +297,125 @@ export default function CustomersPage() {
 
         {/* Table */}
         <div className="overflow-x-auto min-h-[400px]">
-          <table className="w-full text-left text-sm text-gray-600">
-            <thead className="bg-gray-50/80 text-gray-500 text-xs uppercase font-semibold border-b border-gray-100">
-              <tr>
-                <th className="px-6 py-4">Customer Details</th>
-                <th className="px-6 py-4">Phone Number</th>
-                <th className="px-6 py-4">Pending Udhar</th>
-                <th className="px-6 py-4">Last Payment</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {processedCustomers.map((customer) => {
-                const status = customer.udharAmount === 0 ? 'Clear' : customer.udharAmount > 5000 ? 'Overdue' : 'Pending';
-                
-                return (
-                  <tr 
-                    key={customer.id} 
-                    onClick={() => router.push(`/customers/${customer.id}`)}
-                    className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <img 
-                          src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${customer.name}`} 
-                          alt={customer.name} 
-                          className="w-9 h-9 rounded-full bg-gray-100"
-                        />
-                        <span className="font-bold text-gray-800">{customer.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 font-medium text-gray-600">{customer.phone}</td>
-                    <td className="px-6 py-4">
-                      <span className={`font-bold ${customer.udharAmount > 0 ? 'text-orange-500' : 'text-green-500'}`}>
-                        ₹{customer.udharAmount.toLocaleString('en-IN')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-gray-500">{customer.lastPurchase ? new Date(customer.lastPurchase).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                        status === 'Overdue' ? 'bg-red-50 text-red-600' :
-                        status === 'Clear' ? 'bg-green-50 text-green-600' :
-                        'bg-orange-50 text-orange-600'
-                      }`}>
-                        {status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right relative">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === customer.id ? null : customer.id); }}
-                        className="p-2 text-gray-400 hover:text-[#8B5CF6] transition-colors rounded-lg hover:bg-[#8B5CF6]/10"
-                      >
-                        <MoreVertical size={18} />
-                      </button>
+          {isLoading ? (
+            <div className="flex min-h-[400px] items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-gray-500">
+                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#8B5CF6]" />
+                <p className="text-sm font-medium">Loading customers...</p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex min-h-[400px] items-center justify-center px-6">
+              <div className="text-center">
+                <p className="font-medium text-gray-800">Unable to load customers</p>
+                <p className="mt-1 text-xs text-gray-500">{error}</p>
+                <button
+                  onClick={() => void fetchCustomers()}
+                  className="mt-4 rounded-xl bg-[#8B5CF6] px-4 py-2 text-sm font-bold text-white shadow-lg shadow-purple-500/30 transition-all hover:bg-[#7C3AED]"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          ) : (
+            <table className="w-full text-left text-sm text-gray-600">
+              <thead className="bg-gray-50/80 text-gray-500 text-xs uppercase font-semibold border-b border-gray-100">
+                <tr>
+                  <th className="px-6 py-4">Customer Details</th>
+                  <th className="px-6 py-4">Phone Number</th>
+                  <th className="px-6 py-4">Pending Udhar</th>
+                  <th className="px-6 py-4">Last Payment</th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {processedCustomers.map((customer) => {
+                  const status = customer.udharAmount === 0 ? 'Clear' : customer.udharAmount > 5000 ? 'Overdue' : 'Pending';
+                  
+                  return (
+                    <tr 
+                      key={customer.id} 
+                      onClick={() => router.push(`/customers/${customer.id}`)}
+                      className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <img 
+                            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${customer.name}`} 
+                            alt={customer.name} 
+                            className="w-9 h-9 rounded-full bg-gray-100"
+                          />
+                          <span className="font-bold text-gray-800">{customer.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 font-medium text-gray-600">{customer.phone}</td>
+                      <td className="px-6 py-4">
+                        <span className={`font-bold ${customer.udharAmount > 0 ? 'text-orange-500' : 'text-green-500'}`}>
+                          ₹{customer.udharAmount.toLocaleString('en-IN')}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-500">{customer.lastPurchase ? new Date(customer.lastPurchase).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                          status === 'Overdue' ? 'bg-red-50 text-red-600' :
+                          status === 'Clear' ? 'bg-green-50 text-green-600' :
+                          'bg-orange-50 text-orange-600'
+                        }`}>
+                          {status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right relative">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === customer.id ? null : customer.id); }}
+                          className="p-2 text-gray-400 hover:text-[#8B5CF6] transition-colors rounded-lg hover:bg-[#8B5CF6]/10"
+                        >
+                          <MoreVertical size={18} />
+                        </button>
 
-                      <AnimatePresence>
-                        {openActionMenuId === customer.id && (
-                          <motion.div 
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="absolute right-8 top-10 w-48 bg-white border border-gray-100 shadow-xl rounded-xl z-50 overflow-hidden text-left"
-                          >
-                            {['View Details', 'Record Payment', 'Send Reminder', 'Edit Customer'].map(action => (
-                              <button 
-                                key={action}
-                                onClick={(e) => handleAction(action, customer, e)}
-                                className="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 font-medium transition-colors"
-                              >
-                                {action}
-                              </button>
-                            ))}
-                            <div className="h-px bg-gray-100 w-full" />
-                            <button 
-                              onClick={(e) => handleAction('Delete', customer, e)}
-                              className="w-full text-left px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 font-bold transition-colors"
+                        <AnimatePresence>
+                          {openActionMenuId === customer.id && (
+                            <motion.div 
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              className="absolute right-8 top-10 w-48 bg-white border border-gray-100 shadow-xl rounded-xl z-50 overflow-hidden text-left"
                             >
-                              Delete
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                              {['View Details', 'Record Payment', 'Send Reminder', 'Edit Customer'].map(action => (
+                                <button 
+                                  key={action}
+                                  onClick={(e) => handleAction(action, customer, e)}
+                                  className="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 font-medium transition-colors"
+                                >
+                                  {action}
+                                </button>
+                              ))}
+                              <div className="h-px bg-gray-100 w-full" />
+                              <button 
+                                onClick={(e) => handleAction('Delete', customer, e)}
+                                className="w-full text-left px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 font-bold transition-colors"
+                              >
+                                Delete
+                              </button>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {processedCustomers.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                      <Users className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                      <p className="font-medium text-gray-800">No customers found</p>
+                      <p className="text-xs mt-1">Try adjusting your search terms.</p>
                     </td>
                   </tr>
-                );
-              })}
-              {processedCustomers.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                    <Users className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-                    <p className="font-medium text-gray-800">No customers found</p>
-                    <p className="text-xs mt-1">Try adjusting your search terms.</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </Card>
 
