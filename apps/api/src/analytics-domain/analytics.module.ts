@@ -9,7 +9,6 @@ import { AnalyticsController } from './analytics.controller';
 
 @Module({
   imports: [PrismaModule],
-  controllers: [AnalyticsController],
   providers: [
     KpiService,
     ClassificationService,

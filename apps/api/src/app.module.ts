@@ -61,9 +61,11 @@ import { ProcurementWorkflowDomainModule } from './procurement-workflow-domain/p
 import { PurchaseAnalyticsDomainModule } from './purchase-analytics-domain/purchase-analytics-domain.module';
 import { PurchaseEventsDomainModule } from './purchase-events-domain/purchase-events-domain.module';
 import { DocumentModule } from './common/document/document.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
+    EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
