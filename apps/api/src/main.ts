@@ -6,6 +6,7 @@ import { CorrelationLogger } from './common/logger/correlation.logger';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import helmet from 'helmet';
 import { AuthenticatedIoAdapter } from './iam/websockets/authenticated-io.adapter';
+import { ConfigService } from '@nestjs/config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -31,9 +32,10 @@ async function bootstrap() {
   app.use(helmet());
 
   // Strict CORS Lockdown
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const configService = app.get(ConfigService);
+  const frontendUrl = configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
   app.enableCors({
-    origin: frontendUrl.split(','),
+    origin: frontendUrl.split(',').map((s: string) => s.trim()),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-correlation-id'],
@@ -63,7 +65,7 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
   }
 
-  const port = process.env.PORT || 3001;
+  const port = configService.get<number>('PORT') || 3002;
   await app.listen(port);
   logger.log(`Application is running on: http://localhost:${port}`);
 }

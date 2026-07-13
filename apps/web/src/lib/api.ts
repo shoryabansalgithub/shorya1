@@ -2,7 +2,7 @@ import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import type { Session } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,

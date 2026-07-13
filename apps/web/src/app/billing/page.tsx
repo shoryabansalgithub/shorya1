@@ -168,7 +168,7 @@ function BillingContent() {
       };
 
       // Simulated or actual POST request
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/billing/invoice`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/billing/invoice`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

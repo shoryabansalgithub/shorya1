@@ -22,7 +22,7 @@ function isDukaanUser(u: User): u is DukaanUser {
 // signIn callback so the backend is always the single source of truth.
 // ---------------------------------------------------------------------------
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
 
 async function provisionUserFromBackend(
   payload: Record<string, unknown>,

@@ -69,6 +69,15 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
+      // ENV-1: Deterministic loading precedence (first match wins)
+      // .env.local    → Developer secrets (highest priority, never committed)
+      // .env.{ENV}    → Environment-specific overrides
+      // .env          → Base defaults (backward compatible)
+      envFilePath: [
+        '.env.local',
+        `.env.${process.env.NODE_ENV || 'development'}`,
+        '.env',
+      ],
       validationSchema: Joi.object({
         DATABASE_URL: Joi.string().required(),
         JWT_SECRET: Joi.string().required(),
@@ -76,7 +85,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
         JWT_REFRESH_SECRET: Joi.string().required(),
         JWT_REFRESH_EXPIRES_IN: Joi.string().required(),
         FRONTEND_URL: Joi.string().required(),
-        PORT: Joi.number().default(3001),
+        PORT: Joi.number().default(3002),
         NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
         STORAGE_ROOT: Joi.string().optional(),
         S3_REGION: Joi.string().optional(),
@@ -85,9 +94,14 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
         S3_SECRET_KEY: Joi.string().optional(),
         S3_BUCKET: Joi.string().optional(),
         S3_PUBLIC_URL: Joi.string().optional(),
-        REDIS_URL: Joi.string().optional(),
+        REDIS_URL: Joi.string().required(),
         GEMINI_API_KEY: Joi.string().optional(),
       }),
+      // ENV-1: Report ALL missing variables at startup, not just the first one
+      validationOptions: {
+        abortEarly: false,
+        allowUnknown: true,
+      },
     }),
     CacheModule.registerAsync({
       isGlobal: true,

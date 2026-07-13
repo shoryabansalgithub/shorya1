@@ -37,6 +37,7 @@ export class StorageService {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly storagePathBuilder: StoragePathBuilder,
   ) {
     this.s3Client = new S3Client({
       region: this.configService.get<string>('S3_REGION') || 'auto',
@@ -82,7 +83,7 @@ export class StorageService {
   ): Promise<void> {
     const shopId = this.tenantContext.getShopId();
     const fileName = `${level}_${new Date().toISOString().split('T')[0]}.log`;
-    const logFile = StoragePathBuilder.getLogFile(shopId, fileName);
+    const logFile = this.storagePathBuilder.getLogFile(shopId, fileName);
     
     await fs.ensureDir(path.dirname(logFile));
 
@@ -98,7 +99,7 @@ export class StorageService {
     customerId: string,
   ): Promise<string> {
     const shopId = this.tenantContext.getShopId();
-    const customerPath = StoragePathBuilder.getCustomerDirectory(shopId, customerId, 'Profile');
+    const customerPath = this.storagePathBuilder.getCustomerDirectory(shopId, customerId, 'Profile');
     
     await fs.ensureDir(customerPath);
 
@@ -123,7 +124,7 @@ export class StorageService {
     customerData: Record<string, unknown>,
   ): Promise<void> {
     const shopId = this.tenantContext.getShopId();
-    const indexPath = StoragePathBuilder.getSystemFile(shopId, 'customer_index.json');
+    const indexPath = this.storagePathBuilder.getSystemFile(shopId, 'customer_index.json');
     await fs.ensureDir(path.dirname(indexPath));
     
     const index = (await fs.readJson(indexPath).catch(() => [])) as Array<Record<string, unknown>>;
@@ -159,7 +160,7 @@ export class StorageService {
     const shopId = this.tenantContext.getShopId();
     await this.validateCustomerOwnership(customerId);
 
-    const invoiceDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.Invoices);
+    const invoiceDir = this.storagePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.Invoices);
     await fs.ensureDir(invoiceDir);
 
     const baseName = `INV-${invoiceId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
@@ -170,7 +171,7 @@ export class StorageService {
       await fs.writeFile(path.join(invoiceDir, `${baseName}-preview.jpg`), thumbnailFile.buffer);
     }
 
-    const registryPath = StoragePathBuilder.getSystemFile(shopId, 'invoice_registry.json');
+    const registryPath = this.storagePathBuilder.getSystemFile(shopId, 'invoice_registry.json');
     await fs.ensureDir(path.dirname(registryPath));
     const registry = (await fs.readJson(registryPath).catch(() => [])) as Array<Record<string, unknown>>;
 
@@ -201,8 +202,8 @@ export class StorageService {
 
     const baseName = `BILL-${billId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
     
-    const photoDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.OriginalPhotos);
-    const billsDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.Bills);
+    const photoDir = this.storagePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.OriginalPhotos);
+    const billsDir = this.storagePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.Bills);
     
     await fs.ensureDir(photoDir);
     await fs.ensureDir(billsDir);
@@ -215,14 +216,14 @@ export class StorageService {
     }
 
     if (pdfFile) {
-      const pdfDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.PDFs);
+      const pdfDir = this.storagePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.PDFs);
       await fs.ensureDir(pdfDir);
       await fs.writeFile(path.join(pdfDir, `${baseName}.pdf`), pdfFile.buffer);
       await fs.writeFile(path.join(billsDir, `${baseName}.pdf`), pdfFile.buffer);
     }
 
     if (ocrText) {
-      const ocrDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.OCR);
+      const ocrDir = this.storagePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.OCR);
       await fs.ensureDir(ocrDir);
       await fs.writeFile(path.join(ocrDir, `${baseName}.txt`), ocrText);
       await fs.writeFile(path.join(billsDir, `${baseName}.txt`), ocrText);
@@ -238,7 +239,7 @@ export class StorageService {
     const shopId = this.tenantContext.getShopId();
     await this.validateCustomerOwnership(customerId);
 
-    const paymentsDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.Payments);
+    const paymentsDir = this.storagePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.Payments);
     await fs.ensureDir(paymentsDir);
 
     const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '_');
@@ -256,7 +257,7 @@ export class StorageService {
     const shopId = this.tenantContext.getShopId();
     await this.validateCustomerOwnership(customerId);
 
-    const statementsDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.Statements);
+    const statementsDir = this.storagePathBuilder.getCustomerDirectory(shopId, customerId, StorageCustomerDirectory.Statements);
     await fs.ensureDir(statementsDir);
 
     const month = new Date().toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase().replace(' ', '-');
@@ -276,7 +277,7 @@ export class StorageService {
     // Reconstruct the datePath if needed, or if we removed datePath from DB logic, we just find it.
     // Assuming the DTO still passes datePath for now if it exists, or we search inside the folder.
     // For extreme safety, we will just use the builder to get the base category folder, then append the filename.
-    const originalDir = StoragePathBuilder.getCustomerDirectory(shopId, customerId, dto.category);
+    const originalDir = this.storagePathBuilder.getCustomerDirectory(shopId, customerId, dto.category);
     
     // Anti-traversal check on filename
     const safeFileName = dto.fileName.replace(/[^a-zA-Z0-9_.-]/g, '');
@@ -291,7 +292,7 @@ export class StorageService {
       throw new BadRequestException('Only files can be deleted');
     }
 
-    const deletedFilePath = StoragePathBuilder.getDeletedFileTarget(shopId, safeFileName);
+    const deletedFilePath = this.storagePathBuilder.getDeletedFileTarget(shopId, safeFileName);
     await fs.ensureDir(path.dirname(deletedFilePath));
 
     try {
@@ -308,12 +309,12 @@ export class StorageService {
     type: string = 'Daily',
   ): Promise<BackupResult> {
     const shopId = this.tenantContext.getShopId();
-    const backupDir = StoragePathBuilder.getBackupDirectory(shopId, type);
+    const backupDir = this.storagePathBuilder.getBackupDirectory(shopId, type);
     await fs.ensureDir(backupDir);
 
     const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '_');
     const backupPath = path.join(backupDir, `backup_${dateStr}.zip`);
-    const shopRoot = StoragePathBuilder.getShopRoot(shopId);
+    const shopRoot = this.storagePathBuilder.getShopRoot(shopId);
 
     return new Promise<BackupResult>((resolve, reject) => {
       const output = fs.createWriteStream(backupPath);
@@ -363,7 +364,7 @@ export class StorageService {
     const sanitizedName = parsed.name;
     const ext = parsed.ext.toLowerCase();
     
-    const prefix = StoragePathBuilder.getS3Prefix(shopId, folder);
+    const prefix = this.storagePathBuilder.getS3Prefix(shopId, folder);
     const objectKey = `${prefix}/${sanitizedName}-${uniqueId}${ext}`;
 
     const command = new PutObjectCommand({

@@ -22,6 +22,16 @@ export class AuthenticatedIoAdapter extends IoAdapter {
   }
 
   createIOServer(port: number, options?: any): Server {
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const origins = frontendUrl.split(',').map(s => s.trim());
+    
+    options = {
+      ...options,
+      cors: {
+        origin: origins,
+        credentials: true,
+      }
+    };
     const server: Server = super.createIOServer(port, options);
 
     // This middleware intercepts ALL connections before they reach the Gateway

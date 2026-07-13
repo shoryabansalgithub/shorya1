@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import { Lock, Mail, User, Store, ArrowRight, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
 
 export const dynamic = 'force-dynamic';
 

@@ -1,13 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class SalesRedisBroadcaster {
   private readonly logger = new Logger(SalesRedisBroadcaster.name);
   private redis: Redis;
 
-  constructor() {
-    this.redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+  constructor(private configService: ConfigService) {
+    const redisUrl = this.configService.getOrThrow<string>('REDIS_URL');
+    this.redis = new Redis(redisUrl);
   }
 
   /**

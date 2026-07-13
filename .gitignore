@@ -28,10 +28,18 @@ lerna-debug.log*
 *.swo
 *~
 
-# Environment
+# Environment — secret-containing files (NEVER committed)
+# See: docs/architecture/environment-architecture.md
 .env
 .env.local
 .env.*.local
+.env.development
+.env.test
+.env.staging
+.env.production
+
+# Environment — onboarding templates (ALWAYS committed)
+!.env.example
 
 # OS
 Thumbs.db

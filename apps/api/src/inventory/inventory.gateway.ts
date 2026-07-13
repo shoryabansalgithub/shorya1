@@ -16,7 +16,6 @@ import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
 
 @WebSocketGateway({
-  cors: { origin: process.env.FRONTEND_URL },
   namespace: '/inventory',
 })
 @UseInterceptors(SocketContextInterceptor)
