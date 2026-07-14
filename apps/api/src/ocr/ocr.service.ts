@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ConfigService } from '@nestjs/config';
+import { AiConfig } from '../config/domains/ai.config';
 import Fuse from 'fuse.js';
 
 import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
@@ -11,7 +11,7 @@ export class OcrService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
+    private readonly aiConfig: AiConfig,
     private readonly tenantContext: TenantContextService
   ) {}
 
@@ -39,7 +39,7 @@ export class OcrService {
 
   private async parseWithGemini(base64Image: string): Promise<any> {
     this.logger.log('Sending image to Gemini API for direct OCR to JSON...');
-    const apiKey = this.config.get<string>('GEMINI_API_KEY');
+    const apiKey = this.aiConfig.geminiApiKey;
     if (!apiKey) {
       throw new BadRequestException('OCR service requires GEMINI_API_KEY environment variable');
     }

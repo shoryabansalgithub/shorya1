@@ -2,7 +2,9 @@ import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import type { Session } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
+import { clientConfig, serverConfig } from '../config/env';
+
+const API_URL = clientConfig.NEXT_PUBLIC_API_URL;
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,
@@ -39,7 +41,7 @@ async function resolveToken(): Promise<string | null> {
     // object is compatible at this library boundary.
     const token = (await getToken({
       req: { cookies: cookieMap },
-      secret: process.env.NEXTAUTH_SECRET,
+      secret: serverConfig.NEXTAUTH_SECRET,
     } as Parameters<typeof getToken>[0])) as JWT | null;
     return token?.accessToken ?? null;
   } catch {

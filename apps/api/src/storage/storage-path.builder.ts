@@ -1,14 +1,14 @@
 import * as path from 'path';
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { StorageConfig } from '../config/domains/storage.config';
 import { StorageCustomerDirectory } from './storage-security.constants';
 
 @Injectable()
 export class StoragePathBuilder {
   private readonly storageRoot: string;
 
-  constructor(private configService: ConfigService) {
-    this.storageRoot = this.configService.get<string>('STORAGE_ROOT') || path.join(process.cwd(), 'data', 'storage');
+  constructor(private storageConfig: StorageConfig) {
+    this.storageRoot = this.storageConfig.storageRoot || path.join(process.cwd(), 'data', 'storage');
   }
 
   private sanitizeSegment(segment: string): string {

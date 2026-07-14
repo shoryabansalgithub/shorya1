@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { RedisConfig } from '../../config/domains/redis.config';
 import Redis from 'ioredis';
 import Redlock from 'redlock';
 
@@ -9,10 +9,10 @@ export class CronLockService implements OnModuleInit, OnModuleDestroy {
   private redisClient: Redis;
   private redlock: Redlock;
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly redisConfig: RedisConfig) {}
 
   onModuleInit() {
-    const redisUrl = this.config.get<string>('REDIS_URL');
+    const redisUrl = this.redisConfig.redisUrl;
     if (!redisUrl) {
       this.logger.warn('REDIS_URL not configured. Cron locks will fallback to local execution only.');
       return;

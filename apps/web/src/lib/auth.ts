@@ -1,6 +1,7 @@
 import type { NextAuthOptions, User, Account, Profile } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
+import { clientConfig, serverConfig } from '../config/env';
 
 // ---------------------------------------------------------------------------
 // Augmented user payload — what our NestJS backend returns and what we store
@@ -21,8 +22,7 @@ function isDukaanUser(u: User): u is DukaanUser {
 // API helper — called from both the Credentials authorize and the Google
 // signIn callback so the backend is always the single source of truth.
 // ---------------------------------------------------------------------------
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002/api';
+const API_URL = clientConfig.NEXT_PUBLIC_API_URL;
 
 async function provisionUserFromBackend(
   payload: Record<string, unknown>,
@@ -57,7 +57,7 @@ async function provisionUserFromBackend(
 // NextAuth configuration
 // ---------------------------------------------------------------------------
 export const authOptions: NextAuthOptions = {
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: serverConfig.NEXTAUTH_SECRET,
   session: {
     strategy: 'jwt',
     maxAge: 30 * 24 * 60 * 60, // 30 days
@@ -87,8 +87,8 @@ export const authOptions: NextAuthOptions = {
 
     // ---- Google OAuth ----
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: serverConfig.GOOGLE_CLIENT_ID!,
+      clientSecret: serverConfig.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
           prompt: 'select_account',
@@ -152,5 +152,5 @@ export const authOptions: NextAuthOptions = {
   },
 
   // Debug only in development
-  debug: process.env.NODE_ENV === 'development',
+  debug: serverConfig.NODE_ENV === 'development',
 };

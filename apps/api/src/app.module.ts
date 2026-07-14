@@ -5,9 +5,9 @@ import { StorageModule } from './storage/storage.module';
 import { BullModule } from '@nestjs/bullmq';
 import { redisStore } from 'cache-manager-redis-yet';
 
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { EnterpriseConfigModule } from './config/enterprise-config.module';
+import { RedisConfig } from './config/domains/redis.config';
 import { PrismaModule } from './prisma/prisma.module';
-import * as Joi from 'joi';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { BillingModule } from './billing/billing.module';
@@ -67,52 +67,15 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
   imports: [
     EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
-    ConfigModule.forRoot({
-      isGlobal: true,
-      // ENV-1: Deterministic loading precedence (first match wins)
-      // .env.local    → Developer secrets (highest priority, never committed)
-      // .env.{ENV}    → Environment-specific overrides
-      // .env          → Base defaults (backward compatible)
-      envFilePath: [
-        '.env.local',
-        `.env.${process.env.NODE_ENV || 'development'}`,
-        '.env',
-      ],
-      validationSchema: Joi.object({
-        DATABASE_URL: Joi.string().required(),
-        JWT_SECRET: Joi.string().required(),
-        JWT_EXPIRES_IN: Joi.string().required(),
-        JWT_REFRESH_SECRET: Joi.string().required(),
-        JWT_REFRESH_EXPIRES_IN: Joi.string().required(),
-        FRONTEND_URL: Joi.string().required(),
-        PORT: Joi.number().default(3002),
-        NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
-        STORAGE_ROOT: Joi.string().optional(),
-        S3_REGION: Joi.string().optional(),
-        S3_ENDPOINT: Joi.string().optional(),
-        S3_ACCESS_KEY: Joi.string().optional(),
-        S3_SECRET_KEY: Joi.string().optional(),
-        S3_BUCKET: Joi.string().optional(),
-        S3_PUBLIC_URL: Joi.string().optional(),
-        REDIS_URL: Joi.string().required(),
-        GEMINI_API_KEY: Joi.string().optional(),
-      }),
-      // ENV-1: Report ALL missing variables at startup, not just the first one
-      validationOptions: {
-        abortEarly: false,
-        allowUnknown: true,
-      },
-    }),
+    EnterpriseConfigModule,
     CacheModule.registerAsync({
       isGlobal: true,
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => {
-        const redisUrl = configService.get<string>('REDIS_URL');
-        if (redisUrl) {
+      inject: [RedisConfig],
+      useFactory: async (redisConfig: RedisConfig) => {
+        if (redisConfig.redisUrl) {
           return {
             store: redisStore as any,
-            url: redisUrl,
+            url: redisConfig.redisUrl,
             ttl: 3600 * 1000,
           } as any;
         }
@@ -120,11 +83,10 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
       },
     }),
     BullModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
+      inject: [RedisConfig],
+      useFactory: (redisConfig: RedisConfig) => ({
         connection: {
-          url: configService.get<string>('REDIS_URL'),
+          url: redisConfig.redisUrl,
         },
         defaultJobOptions: {
           removeOnComplete: true,

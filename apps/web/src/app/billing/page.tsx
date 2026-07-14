@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/Toast';
 import { motion } from 'framer-motion';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
+import { clientConfig } from '@/config/env';
 
 function BillingContent() {
   const { toast } = useToast();
@@ -168,7 +169,7 @@ function BillingContent() {
       };
 
       // Simulated or actual POST request
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/billing/invoice`, {
+      const res = await fetch(`${clientConfig.NEXT_PUBLIC_API_URL.replace('/api', '')}/billing/invoice`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -6,7 +6,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { StorageConfig } from '../config/domains/storage.config';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import archiver from 'archiver';
 import * as crypto from 'crypto';
@@ -34,17 +34,17 @@ export class StorageService {
   private readonly s3Client: S3Client;
 
   constructor(
-    private readonly configService: ConfigService,
+    private readonly storageConfig: StorageConfig,
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
     private readonly storagePathBuilder: StoragePathBuilder,
   ) {
     this.s3Client = new S3Client({
-      region: this.configService.get<string>('S3_REGION') || 'auto',
-      endpoint: this.configService.get<string>('S3_ENDPOINT'),
+      region: this.storageConfig.s3Region || 'auto',
+      endpoint: this.storageConfig.s3Endpoint,
       credentials: {
-        accessKeyId: this.configService.get<string>('S3_ACCESS_KEY') || '',
-        secretAccessKey: this.configService.get<string>('S3_SECRET_KEY') || '',
+        accessKeyId: this.storageConfig.s3AccessKey || '',
+        secretAccessKey: this.storageConfig.s3SecretKey || '',
       },
     });
   }
@@ -353,7 +353,7 @@ export class StorageService {
     folder: string = 'general',
   ): Promise<string> {
     const shopId = this.tenantContext.getShopId();
-    const bucketName = this.configService.get<string>('S3_BUCKET');
+    const bucketName = this.storageConfig.s3Bucket;
     if (!bucketName) {
       throw new InternalServerErrorException('Cloud storage is not configured');
     }
@@ -378,8 +378,8 @@ export class StorageService {
       await this.s3Client.send(command);
       await this.logAction(`Uploaded file to cloud key=${objectKey}`, 'info');
 
-      const endpoint = this.configService.get<string>('S3_ENDPOINT');
-      const publicUrlBase = this.configService.get<string>('S3_PUBLIC_URL');
+      const endpoint = this.storageConfig.s3Endpoint;
+      const publicUrlBase = this.storageConfig.s3PublicUrl;
 
       if (publicUrlBase) {
         return `${publicUrlBase}/${objectKey}`;

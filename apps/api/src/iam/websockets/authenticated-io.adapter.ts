@@ -2,28 +2,31 @@ import { IoAdapter } from '@nestjs/platform-socket.io';
 import { INestApplicationContext, Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+import { AppConfig } from '../../config/domains/app.config';
+import { JwtConfig } from '../../config/domains/jwt.config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SocketSessionService } from './socket-session.service';
 
 export class AuthenticatedIoAdapter extends IoAdapter {
   private readonly logger = new Logger(AuthenticatedIoAdapter.name);
   private readonly jwtService: JwtService;
-  private readonly configService: ConfigService;
+  private readonly appConfig: AppConfig;
+  private readonly jwtConfig: JwtConfig;
   private readonly prisma: PrismaService;
   private readonly sessionService: SocketSessionService;
 
   constructor(private app: INestApplicationContext) {
     super(app);
     this.jwtService = app.get(JwtService);
-    this.configService = app.get(ConfigService);
+    this.appConfig = app.get(AppConfig);
+    this.jwtConfig = app.get(JwtConfig);
     this.prisma = app.get(PrismaService);
     this.sessionService = app.get(SocketSessionService);
   }
 
   createIOServer(port: number, options?: any): Server {
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
-    const origins = frontendUrl.split(',').map(s => s.trim());
+    const frontendUrl = this.appConfig.frontendUrl;
+    const origins = frontendUrl.split(',').map((s: string) => s.trim());
     
     options = {
       ...options,
@@ -48,7 +51,7 @@ export class AuthenticatedIoAdapter extends IoAdapter {
 
         // Verify JWT Signature
         const payload = this.jwtService.verify(token, {
-          secret: this.configService.get<string>('JWT_SECRET'),
+          secret: this.jwtConfig.jwtSecret,
         });
 
         if (!payload || !payload.sub || !payload.shopId) {

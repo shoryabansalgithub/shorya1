@@ -2,13 +2,17 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/commo
 import { PrismaClient } from '@prisma/client';
 import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
 import { tenantExtension } from './prisma-tenant.extension';
+import { AppConfig, Environment } from '../config/domains/app.config';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
-  constructor(private readonly tenantContextService: TenantContextService) {
-    const isProduction = process.env.NODE_ENV === 'production';
+  constructor(
+    private readonly tenantContextService: TenantContextService,
+    appConfig: AppConfig,
+  ) {
+    const isProduction = appConfig.nodeEnv === Environment.Production;
     super({
       log: isProduction
         ? [
