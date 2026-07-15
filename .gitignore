@@ -33,13 +33,29 @@ lerna-debug.log*
 .env
 .env.local
 .env.*.local
-.env.development
-.env.test
-.env.staging
-.env.production
+apps/api/.env*
+apps/web/.env*
+
+# Secrets and Certificates (NEVER committed)
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secret*
+secrets*
+credentials.json
+service-account.json
+firebase-adminsdk*.json
+aws-credentials
+gcp-credentials
+azure-credentials
 
 # Environment — onboarding templates (ALWAYS committed)
-!.env.example
+!*.env.example
+!*.env.development
+!*.env.test
+!*.env.production
 
 # OS
 Thumbs.db
