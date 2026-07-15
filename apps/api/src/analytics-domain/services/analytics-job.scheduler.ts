@@ -1,13 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
 import { KpiService } from './kpi.service';
 import { ClassificationService } from './classification.service';
 import { ForecastService } from './forecast.service';
 import { RecommendationEngineService } from './recommendation-engine.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CronConfig } from '../../config/domains/cron.config';
 
 @Injectable()
-export class AnalyticsJobScheduler {
+export class AnalyticsJobScheduler implements OnApplicationBootstrap {
   private readonly logger = new Logger(AnalyticsJobScheduler.name);
 
   constructor(
@@ -15,15 +17,24 @@ export class AnalyticsJobScheduler {
     private readonly kpiService: KpiService,
     private readonly classificationService: ClassificationService,
     private readonly forecastService: ForecastService,
-    private readonly recommendationEngine: RecommendationEngineService
+    private readonly recommendationEngine: RecommendationEngineService,
+    private readonly cronConfig: CronConfig,
+    private readonly schedulerRegistry: SchedulerRegistry
   ) {}
+
+  onApplicationBootstrap() {
+    const job = new CronJob(this.cronConfig.analyticsJobCron, () => {
+      this.runDailyAnalytics();
+    });
+    this.schedulerRegistry.addCronJob('AnalyticsJob', job);
+    job.start();
+  }
 
   /**
    * Main Analytics Orchestrator
    * Runs nightly to update the entire CQRS analytical layer for all tenants.
    * Can also be triggered via BullMQ for distributed processing.
    */
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async runDailyAnalytics() {
     this.logger.log('--- STARTING GLOBAL ENTERPRISE INVENTORY ANALYTICS JOB ---');
     

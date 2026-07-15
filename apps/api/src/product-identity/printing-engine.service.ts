@@ -1,20 +1,22 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BarcodeGeneratorService } from './barcode-generator.service';
+import { InventoryFeatureConfig } from '../config/domains/features/inventory-feature.config';
 
 @Injectable()
 export class PrintingEngineService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly barcodeGenerator: BarcodeGeneratorService,
+    private readonly inventoryConfig: InventoryFeatureConfig
   ) {}
 
   /**
    * Generates a virtual PDF or standard print payload for a barcode template.
    */
   async printBarcode(shopId: string, barcodeCode: string, templateId: string, quantity: number, userId: string) {
-    if (quantity < 1 || quantity > 1000) {
-      throw new BadRequestException('Print quantity must be between 1 and 1000');
+    if (quantity < 1 || quantity > this.inventoryConfig.maxPrintQuantity) {
+      throw new BadRequestException(`Print quantity must be between 1 and ${this.inventoryConfig.maxPrintQuantity}`);
     }
 
     const template = await this.prisma.barcodeTemplate.findUnique({

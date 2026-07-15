@@ -2,11 +2,15 @@ import { Controller, Get, Post, Delete, Param, Body, UseGuards, Req } from '@nes
 import { PrismaService } from '../../../prisma/prisma.service';
 import { JwtAuthGuard } from '../../../auth/jwt-auth.guard';
 import { TenantGuard } from '../../../iam/guards/tenant.guard';
+import { EventsFeatureConfig } from '../../../config/domains/features/events-feature.config';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
 @Controller('webhooks')
 export class WebhookController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventsFeatureConfig: EventsFeatureConfig
+  ) {}
 
   @Post()
   async createEndpoint(@Body() dto: any, @Req() req: any) {
@@ -33,7 +37,7 @@ export class WebhookController {
     return this.prisma.webhookDelivery.findMany({
       where: { endpointId: id, endpoint: { shopId: req.shop.id } },
       orderBy: { createdAt: 'desc' },
-      take: 50
+      take: this.eventsFeatureConfig.webhookDeliveryLimit
     });
   }
 

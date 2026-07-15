@@ -6,6 +6,7 @@ import { CustomerAuditService } from './services/customer-audit.service';
 import { EventPublisherService } from '../events-domain/services/event-publisher.service';
 import { CreateEnterpriseCustomerDto } from './dto/enterprise-customer.dto';
 import { CustomerType, CustomerLifecycleStatus, KycStatus } from './domain/enums';
+import { SalesFeatureConfig } from '../config/domains/features/sales-feature.config';
 
 @Injectable()
 export class CustomersService {
@@ -16,7 +17,8 @@ export class CustomersService {
     private readonly tenantContext: TenantContextService,
     private readonly customerRepository: CustomerRepository,
     private readonly auditService: CustomerAuditService,
-    private readonly eventPublisher: EventPublisherService
+    private readonly eventPublisher: EventPublisherService,
+    private readonly salesFeatureConfig: SalesFeatureConfig
   ) {}
 
   async create(data: CreateEnterpriseCustomerDto | any) {
@@ -30,7 +32,7 @@ export class CustomersService {
         shop: { connect: { id: shopId } },
         email: data.email || null,
         address: data.address || null,
-        creditLimit: 5000,
+        creditLimit: this.salesFeatureConfig.defaultCreditLimit,
         outstandingBalance: 0,
         type: data.type || CustomerType.RETAIL,
         lifecycleStatus: data.lifecycleStatus || CustomerLifecycleStatus.LEAD,

@@ -1,11 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SearchFeatureConfig } from '../config/domains/features/search-feature.config';
 
 @Injectable()
 export class SearchAnalyticsService {
   private readonly logger = new Logger(SearchAnalyticsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly searchFeatureConfig: SearchFeatureConfig
+  ) {}
 
   /**
    * Logs a search execution for analytics and history.
@@ -39,7 +43,7 @@ export class SearchAnalyticsService {
       },
       _count: { query: true },
       orderBy: { _count: { query: 'desc' } },
-      take: 10
+      take: this.searchFeatureConfig.analyticsLimit,
     });
 
     return popular.map(p => ({

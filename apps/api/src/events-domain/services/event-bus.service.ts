@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
+import { BullConfig } from '../../config/domains/bull.config';
 
 @Injectable()
 export class EventBusService {
@@ -10,6 +11,7 @@ export class EventBusService {
   // Inject BullMQ queue. Using a mock-safe architectural wrapper if BullMQ isn't fully set up in tests.
   constructor(
     private readonly prisma: PrismaService,
+    private readonly bullConfig: BullConfig,
     // @InjectQueue('inventory-events') private readonly eventQueue: Queue
   ) {}
 
@@ -22,8 +24,8 @@ export class EventBusService {
     // In production:
     // await this.eventQueue.add(event.eventType, event, {
     //   jobId: event.eventId, // Native BullMQ deduplication
-    //   attempts: 3,
-    //   backoff: { type: 'exponential', delay: 2000 }
+    //   attempts: this.bullConfig.defaultAttempts,
+    //   backoff: { type: this.bullConfig.backoffType || 'exponential', delay: this.bullConfig.backoffDelay }
     // });
 
     // For architectural compilation, we simulate the enqueue process:

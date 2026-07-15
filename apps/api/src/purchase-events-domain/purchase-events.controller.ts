@@ -6,6 +6,7 @@ import { CurrentUser } from '../iam/decorators/current-user.decorator';
 import { EventsDlqService } from './services/events-dlq.service';
 import { EventsReplayService } from './services/events-replay.service';
 import { EventsStatisticsService } from './services/events-statistics.service';
+import { PurchaseFeatureConfig } from '../config/domains/features/purchase-feature.config';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
 @Controller('purchase-events')
@@ -13,7 +14,8 @@ export class PurchaseEventsController {
   constructor(
     private readonly dlqService: EventsDlqService,
     private readonly replayService: EventsReplayService,
-    private readonly statisticsService: EventsStatisticsService
+    private readonly statisticsService: EventsStatisticsService,
+    private readonly purchaseConfig: PurchaseFeatureConfig
   ) {}
 
   @Get('statistics')
@@ -22,8 +24,8 @@ export class PurchaseEventsController {
   }
 
   @Get('dead-letter')
-  async getDeadLetters(@CurrentShop() shopId: string, @Query('limit') limit = 50) {
-    return this.dlqService.getDeadLetters(shopId, Number(limit));
+  async getDeadLetters(@CurrentShop() shopId: string, @Query('limit') limit?: number) {
+    return this.dlqService.getDeadLetters(shopId, limit || this.purchaseConfig.deadLetterPaginationLimit);
   }
 
   @Post('retry/:id')

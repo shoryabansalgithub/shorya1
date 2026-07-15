@@ -3,13 +3,17 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as crypto from 'crypto';
+import { QueueConfig } from '../../config/domains/queue.config';
 
 @Injectable()
 @Processor('sales-webhooks')
 export class SalesWebhookWorker extends WorkerHost {
   private readonly logger = new Logger(SalesWebhookWorker.name);
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly queueConfig: QueueConfig,
+  ) {
     super();
   }
 
@@ -56,7 +60,7 @@ export class SalesWebhookWorker extends WorkerHost {
             'X-DukanAI-Event': type
           },
           body: payloadString,
-          signal: AbortSignal.timeout(5000) // 5 seconds max
+          signal: AbortSignal.timeout(this.queueConfig.timeout!)
         });
 
         const latencyMs = Date.now() - startTime;

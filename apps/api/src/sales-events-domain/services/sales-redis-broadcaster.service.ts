@@ -1,15 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import Redis from 'ioredis';
-import { RedisConfig } from '../../config/domains/redis.config';
+import { REDIS_CLIENT } from '../../common/redis/redis.module';
+
 @Injectable()
 export class SalesRedisBroadcaster {
   private readonly logger = new Logger(SalesRedisBroadcaster.name);
-  private redis: Redis;
-
-  constructor(private redisConfig: RedisConfig) {
-    const redisUrl = this.redisConfig.redisUrl;
-    this.redis = new Redis(redisUrl);
-  }
+  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
 
   /**
    * Broadcasts the verified event over Redis Pub/Sub for real-time consumers (e.g., Dashboards)

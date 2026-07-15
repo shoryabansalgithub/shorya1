@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule as NestConfigModule } from '@nestjs/config';
 import { validateSync } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
 
 import { AppConfig, Environment } from './domains/app.config';
 import { DatabaseConfig } from './domains/database.config';
@@ -31,6 +32,19 @@ import { CorsConfig } from './domains/cors.config';
 import { SwaggerConfig } from './domains/swagger.config';
 import { HealthConfig } from './domains/health.config';
 import { CronConfig } from './domains/cron.config';
+
+// Feature Domains
+import { SalesFeatureConfig } from './domains/features/sales-feature.config';
+import { PurchaseFeatureConfig } from './domains/features/purchase-feature.config';
+import { AnalyticsFeatureConfig } from './domains/features/analytics-feature.config';
+import { SearchFeatureConfig } from './domains/features/search-feature.config';
+import { ValidationFeatureConfig } from './domains/features/validation-feature.config';
+import { EventsFeatureConfig } from './domains/features/events-feature.config';
+import { InventoryFeatureConfig } from './domains/features/inventory-feature.config';
+import { ImportExportFeatureConfig } from './domains/features/import-export-feature.config';
+import { OcrFeatureConfig } from './domains/features/ocr-feature.config';
+import { BillingFeatureConfig } from './domains/features/billing-feature.config';
+import { ProcurementFeatureConfig } from './domains/features/procurement-feature.config';
 
 function validateConfig<T extends object>(configClass: T): T {
   const errors = validateSync(configClass);
@@ -132,6 +146,12 @@ function validateConfig<T extends object>(configClass: T): T {
       provide: PrismaConfig,
       useFactory: () => {
         const config = new PrismaConfig();
+        Object.assign(config, {
+          logQueries: process.env.PRISMA_LOG_QUERIES === 'true',
+          logLevelProduction: ['warn', 'error'],
+          logLevelDevelopment: ['query', 'info', 'warn', 'error'],
+          slowQueryThreshold: parseInt(process.env.PRISMA_SLOW_QUERY_THRESHOLD || '1000', 10),
+        });
         return validateConfig(config);
       },
     },
@@ -139,20 +159,27 @@ function validateConfig<T extends object>(configClass: T): T {
       provide: QueueConfig,
       useFactory: () => {
         const config = new QueueConfig();
+        Object.assign(config, {
+          defaultConcurrency: parseInt(process.env.QUEUE_CONCURRENCY || '5', 10),
+          timeout: parseInt(process.env.QUEUE_TIMEOUT || '5000', 10),
+        });
         return validateConfig(config);
       },
     },
     {
       provide: BullConfig,
       useFactory: () => {
-        const config = new BullConfig();
-        return validateConfig(config);
+        return validateConfig(plainToInstance(BullConfig, process.env, { enableImplicitConversion: true }));
       },
     },
     {
       provide: CacheConfig,
       useFactory: () => {
         const config = new CacheConfig();
+        Object.assign(config, {
+          ttl: parseInt(process.env.CACHE_TTL || '3600000', 10),
+          maxItems: parseInt(process.env.CACHE_MAX_ITEMS || '1000', 10),
+        });
         return validateConfig(config);
       },
     },
@@ -250,8 +277,7 @@ function validateConfig<T extends object>(configClass: T): T {
     {
       provide: SecurityConfig,
       useFactory: () => {
-        const config = new SecurityConfig();
-        return validateConfig(config);
+        return validateConfig(plainToInstance(SecurityConfig, process.env, { enableImplicitConversion: true }));
       },
     },
     {
@@ -282,6 +308,17 @@ function validateConfig<T extends object>(configClass: T): T {
         return validateConfig(config);
       },
     },
+    { provide: SalesFeatureConfig, useFactory: () => validateConfig(plainToInstance(SalesFeatureConfig, process.env, { enableImplicitConversion: true })) },
+    { provide: PurchaseFeatureConfig, useFactory: () => validateConfig(plainToInstance(PurchaseFeatureConfig, process.env, { enableImplicitConversion: true })) },
+    { provide: AnalyticsFeatureConfig, useFactory: () => validateConfig(plainToInstance(AnalyticsFeatureConfig, process.env, { enableImplicitConversion: true })) },
+    { provide: SearchFeatureConfig, useFactory: () => validateConfig(plainToInstance(SearchFeatureConfig, process.env, { enableImplicitConversion: true })) },
+    { provide: ValidationFeatureConfig, useFactory: () => validateConfig(plainToInstance(ValidationFeatureConfig, process.env, { enableImplicitConversion: true })) },
+    { provide: EventsFeatureConfig, useFactory: () => validateConfig(plainToInstance(EventsFeatureConfig, process.env, { enableImplicitConversion: true })) },
+    { provide: InventoryFeatureConfig, useFactory: () => validateConfig(plainToInstance(InventoryFeatureConfig, process.env, { enableImplicitConversion: true })) },
+    { provide: ImportExportFeatureConfig, useFactory: () => validateConfig(plainToInstance(ImportExportFeatureConfig, process.env, { enableImplicitConversion: true })) },
+    { provide: OcrFeatureConfig, useFactory: () => validateConfig(plainToInstance(OcrFeatureConfig, process.env, { enableImplicitConversion: true })) },
+    { provide: BillingFeatureConfig, useFactory: () => validateConfig(plainToInstance(BillingFeatureConfig, process.env, { enableImplicitConversion: true })) },
+    { provide: ProcurementFeatureConfig, useFactory: () => validateConfig(plainToInstance(ProcurementFeatureConfig, process.env, { enableImplicitConversion: true })) },
   ],
   exports: [
     AppConfig,
@@ -313,6 +350,17 @@ function validateConfig<T extends object>(configClass: T): T {
     SwaggerConfig,
     HealthConfig,
     CronConfig,
+    SalesFeatureConfig,
+    PurchaseFeatureConfig,
+    AnalyticsFeatureConfig,
+    SearchFeatureConfig,
+    ValidationFeatureConfig,
+    EventsFeatureConfig,
+    InventoryFeatureConfig,
+    ImportExportFeatureConfig,
+    OcrFeatureConfig,
+    BillingFeatureConfig,
+    ProcurementFeatureConfig,
   ],
 })
 export class EnterpriseConfigModule {}

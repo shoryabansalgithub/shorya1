@@ -9,18 +9,19 @@ import { VendorBillOutstandingService } from '../services/vendor-bill-outstandin
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
+import { CacheConfig } from '../../config/domains/cache.config';
 
 @Injectable()
 export class VendorBillRepository {
-  constructor(
-    private readonly prisma: PrismaService,
+  constructor(private readonly prisma: PrismaService,
     private readonly lifecycle: VendorBillLifecycleService,
     private readonly approval: VendorBillApprovalService,
     private readonly matching: VendorBillMatchingService,
     private readonly tax: VendorBillTaxService,
     private readonly outstanding: VendorBillOutstandingService,
     private readonly eventPublisher: SalesEventPublisher,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig
   ) {}
 
   async createVendorBill(shopId: string, payload: any, actorId: string, ipAddress?: string) {
@@ -107,7 +108,7 @@ export class VendorBillRepository {
       throw new NotFoundException(`Vendor Bill ${id} not found.`);
     }
 
-    await this.cacheManager.set(cacheKey, bill, 60000); 
+    await this.cacheManager.set(cacheKey, bill, this.cacheConfig.vendorBillTtlMs); 
     return bill;
   }
 

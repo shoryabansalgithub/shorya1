@@ -54,59 +54,98 @@ export class ProductVariantsService {
       const cartesian = (...a: any[]) => a.reduce((a, b) => a.flatMap((d: any) => b.map((e: any) => [d, e].flat())));
       const combinations = valuesArray.length > 1 ? cartesian(...valuesArray) : valuesArray[0].map(v => [v]);
 
-      const createdVariants = [];
-
-      for (const combination of combinations) {
-          const comboValues = Array.isArray(combination) ? combination : [combination];
-          
-          // Generate SKU suffix
-          const skuSuffix = comboValues.map(v => v.substring(0, 3).toUpperCase()).join('-');
-          const variantSku = `${product.sku}-${skuSuffix}`;
-
-          const variant = await this.prisma.productVariant.upsert({
-              where: { shopId_sku_isDeleted: { shopId, sku: variantSku, isDeleted: false } },
-              update: {},
-              create: {
+      return this.prisma.$transaction(async (tx) => {
+          // 1. Bulk Create Variants
+          const variantData = combinations.map((combination: any) => {
+              const comboValues = Array.isArray(combination) ? combination : [combination];
+              const skuSuffix = comboValues.map((v: any) => v.substring(0, 3).toUpperCase()).join('-');
+              return {
                   productId,
                   shopId,
-                  sku: variantSku,
+                  sku: `${product.sku}-${skuSuffix}`,
                   costPrice: product.costPrice,
                   sellingPrice: product.sellingPrice,
                   mrp: product.mrp,
-              }
+              };
           });
 
-          // Link attributes
-          for (let i = 0; i < keys.length; i++) {
-              const attrName = keys[i];
-              const attrVal = comboValues[i];
+          await tx.productVariant.createMany({
+              data: variantData,
+              skipDuplicates: true
+          });
+
+          const createdVariantSkus = variantData.map((v: any) => v.sku);
+          const variants = await tx.productVariant.findMany({
+              where: { shopId, sku: { in: createdVariantSkus }, isDeleted: false }
+          });
+          const variantMap = new Map(variants.map((v: any) => [v.sku, v]));
+
+          // 2. Process Attributes and Values efficiently
+          const attributeValueIds = new Map<string, string>(); // 'AttrName:AttrVal' -> attributeValueId
+          
+          for (const attrName of keys) {
+              const attrVals = attributes[attrName];
+              const slug = attrName.toLowerCase().replace(/[^a-z0-9]/g, '-');
               
-              const { values } = await this.createAttribute(attrName, [attrVal]);
-              
-              await this.prisma.productVariantAttribute.upsert({
-                  where: {
-                      variantId_attributeValueId: {
-                          variantId: variant.id,
-                          attributeValueId: values[0].id
+              let attribute = await tx.variantAttribute.findUnique({
+                  where: { shopId_slug: { shopId, slug } }
+              });
+
+              if (!attribute) {
+                  attribute = await tx.variantAttribute.create({
+                      data: { shopId, name: attrName, slug }
+                  });
+              }
+
+              for (const val of attrVals) {
+                  const valSlug = val.toLowerCase().replace(/[^a-z0-9]/g, '-');
+                  const attrVal = await tx.variantAttributeValue.upsert({
+                      where: { attributeId_slug: { attributeId: attribute.id, slug: valSlug } },
+                      update: {},
+                      create: { attributeId: attribute.id, value: val, slug: valSlug }
+                  });
+                  attributeValueIds.set(`${attrName}:${val}`, attrVal.id);
+              }
+          }
+
+          // 3. Link Variants and Attributes
+          const linkData: any[] = [];
+          for (const combination of combinations) {
+              const comboValues = Array.isArray(combination) ? combination : [combination];
+              const skuSuffix = comboValues.map((v: any) => v.substring(0, 3).toUpperCase()).join('-');
+              const variantSku = `${product.sku}-${skuSuffix}`;
+              const variant = variantMap.get(variantSku);
+
+              if (variant) {
+                  for (let i = 0; i < keys.length; i++) {
+                      const attrName = keys[i];
+                      const attrVal = comboValues[i];
+                      const attrValId = attributeValueIds.get(`${attrName}:${attrVal}`);
+                      
+                      if (attrValId) {
+                          linkData.push({
+                              variantId: variant.id,
+                              attributeValueId: attrValId
+                          });
                       }
-                  },
-                  update: {},
-                  create: {
-                      variantId: variant.id,
-                      attributeValueId: values[0].id
                   }
+              }
+          }
+
+          if (linkData.length > 0) {
+              await tx.productVariantAttribute.createMany({
+                  data: linkData,
+                  skipDuplicates: true
               });
           }
 
-          createdVariants.push(variant);
-      }
+          // Update product type to VARIABLE
+          await tx.product.update({
+              where: { id: productId },
+              data: { type: 'VARIABLE' }
+          });
 
-      // Update product type to VARIABLE
-      await this.prisma.product.update({
-          where: { id: productId },
-          data: { type: 'VARIABLE' }
+          return variants;
       });
-
-      return createdVariants;
   }
 }

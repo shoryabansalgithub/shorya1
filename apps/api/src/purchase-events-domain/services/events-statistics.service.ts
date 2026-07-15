@@ -2,12 +2,13 @@ import { Injectable, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
+import { CacheConfig } from '../../config/domains/cache.config';
 
 @Injectable()
 export class EventsStatisticsService {
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache
+  constructor(private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig
   ) {}
 
   async getDashboardMetrics(shopId: string) {
@@ -23,7 +24,7 @@ export class EventsStatisticsService {
       dlqSize: await this.prisma.purchaseDeadLetter.count({ where: { shopId, status: 'ACTIVE' } })
     };
 
-    await this.cacheManager.set(cacheKey, metrics, 60000); 
+    await this.cacheManager.set(cacheKey, metrics, this.cacheConfig.eventsStatsTtlMs); 
     return metrics;
   }
 }

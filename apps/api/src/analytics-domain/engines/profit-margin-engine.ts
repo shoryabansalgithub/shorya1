@@ -2,9 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import Decimal from 'decimal.js';
 
+import { AnalyticsFeatureConfig } from '../../config/domains/features/analytics-feature.config';
+
 @Injectable()
 export class ProfitMarginEngine {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly analyticsConfig: AnalyticsFeatureConfig
+  ) {}
 
   /**
    * Calculates Gross Profit Margin % and Net Margin %.
@@ -20,11 +25,12 @@ export class ProfitMarginEngine {
   /**
    * Evaluates top performing products based on profit.
    */
-  async getTopProductsByProfit(shopId: string, limit: number = 10) {
+  async getTopProductsByProfit(shopId: string, limit?: number) {
+    const finalLimit = limit ?? this.analyticsConfig.topProductsLimit;
     const products = await this.prisma.productSalesAggregation.findMany({
       where: { shopId },
       orderBy: { netRevenue: 'desc' },
-      take: limit,
+      take: finalLimit,
       include: { product: true }
     });
 

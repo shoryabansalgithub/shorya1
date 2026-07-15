@@ -5,12 +5,14 @@ import { CurrentShop } from '../iam/decorators/current-shop.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { SalesFeatureConfig } from '../config/domains/features/sales-feature.config';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
 @Controller('sales/events')
 export class SalesEventsController {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly salesFeatureConfig: SalesFeatureConfig,
     @InjectQueue('sales-events') private readonly salesEventsQueue: Queue
   ) {}
 
@@ -19,7 +21,7 @@ export class SalesEventsController {
     return this.prisma.outboxEvent.findMany({
       where: { shopId, type: { startsWith: 'Order' } }, // Simple filter for demo
       orderBy: { createdAt: 'desc' },
-      take: 100
+      take: this.salesFeatureConfig.recentEventsLimit
     });
   }
 

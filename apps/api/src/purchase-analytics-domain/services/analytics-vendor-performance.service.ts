@@ -2,12 +2,15 @@ import { Injectable, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
+import { AnalyticsFeatureConfig } from '../../config/domains/features/analytics-feature.config';
+import { CacheConfig } from '../../config/domains/cache.config';
 
 @Injectable()
 export class AnalyticsVendorPerformanceService {
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache
+  constructor(private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly analyticsFeatureConfig: AnalyticsFeatureConfig,
+    private readonly cacheConfig: CacheConfig
   ) {}
 
   async getVendorRankings(shopId: string) {
@@ -18,10 +21,10 @@ export class AnalyticsVendorPerformanceService {
     const rankings = await this.prisma.vendorPerformanceSnapshot.findMany({
       where: { shopId },
       orderBy: { overallScore: 'desc' },
-      take: 50 // Top 50 vendors
+      take: this.analyticsFeatureConfig.topVendorsLimit // Configurable limit
     });
 
-    await this.cacheManager.set(cacheKey, rankings, 60000 * 15); // 15 min cache
+    await this.cacheManager.set(cacheKey, rankings, this.cacheConfig.analyticsVendorPerfTtlMs); // 15 min cache
     return rankings;
   }
 }

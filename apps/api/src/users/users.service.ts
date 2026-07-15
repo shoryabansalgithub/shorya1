@@ -12,12 +12,16 @@ import {
   safeUserSelect,
   userWithPasswordSelect,
 } from './user.mapper';
+import { SecurityConfig } from '../config/domains/security.config';
 
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private securityConfig: SecurityConfig
+  ) {}
 
   async findByEmailWithPassword(
     email: string,
@@ -45,7 +49,7 @@ export class UsersService {
   }
 
   async create(data: CreateUserDto): Promise<SafeUserDto> {
-    const salt = await bcrypt.genSalt();
+    const salt = await bcrypt.genSalt(this.securityConfig.bcryptRounds);
     const hashedPassword = await bcrypt.hash(data.password, salt);
     const userId = crypto.randomUUID();
     const shopId = crypto.randomUUID();
@@ -188,8 +192,8 @@ export class UsersService {
       where: { id: userId },
       data: {
         failedAttempts: newAttempts,
-        isLocked: newAttempts >= 5,
-        lockedUntil: newAttempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null,
+        isLocked: newAttempts >= this.securityConfig.maxLoginAttempts,
+        lockedUntil: newAttempts >= this.securityConfig.maxLoginAttempts ? new Date(Date.now() + this.securityConfig.lockoutDurationMs) : null,
       },
     });
   }

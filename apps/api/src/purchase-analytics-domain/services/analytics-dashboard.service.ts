@@ -2,12 +2,13 @@ import { Injectable, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
+import { CacheConfig } from '../../config/domains/cache.config';
 
 @Injectable()
 export class AnalyticsDashboardService {
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache
+  constructor(private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig
   ) {}
 
   /**
@@ -30,7 +31,7 @@ export class AnalyticsDashboardService {
       return null;
     }
 
-    await this.cacheManager.set(cacheKey, snapshot, 60000 * 5); // 5 min cache
+    await this.cacheManager.set(cacheKey, snapshot, this.cacheConfig.analyticsDashboardTtlMs); // 5 min cache
     return snapshot;
   }
 }

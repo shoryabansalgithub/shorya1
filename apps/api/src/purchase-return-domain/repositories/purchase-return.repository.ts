@@ -10,11 +10,11 @@ import { PurchaseReturnApprovalService } from '../services/purchase-return-appro
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
+import { CacheConfig } from '../../config/domains/cache.config';
 
 @Injectable()
 export class PurchaseReturnRepository {
-  constructor(
-    private readonly prisma: PrismaService,
+  constructor(private readonly prisma: PrismaService,
     private readonly lifecycle: PurchaseReturnLifecycleService,
     private readonly validation: PurchaseReturnValidationService,
     private readonly inventory: PurchaseReturnInventoryService,
@@ -22,7 +22,8 @@ export class PurchaseReturnRepository {
     private readonly shipment: PurchaseReturnShipmentService,
     private readonly approval: PurchaseReturnApprovalService,
     private readonly eventPublisher: SalesEventPublisher,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig
   ) {}
 
   async createPurchaseReturn(shopId: string, payload: any, actorId: string, ipAddress?: string) {
@@ -110,7 +111,7 @@ export class PurchaseReturnRepository {
       throw new NotFoundException(`Purchase Return ${id} not found.`);
     }
 
-    await this.cacheManager.set(cacheKey, pr, 60000); 
+    await this.cacheManager.set(cacheKey, pr, this.cacheConfig.purchaseReturnTtlMs); 
     return pr;
   }
 

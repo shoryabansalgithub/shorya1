@@ -1,28 +1,22 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { RedisConfig } from '../../config/domains/redis.config';
+import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
+import { REDIS_CLIENT } from '../redis/redis.module';
 import Redis from 'ioredis';
 import Redlock from 'redlock';
 
 @Injectable()
-export class CronLockService implements OnModuleInit, OnModuleDestroy {
+export class CronLockService implements OnModuleInit {
   private readonly logger = new Logger(CronLockService.name);
-  private redisClient: Redis;
   private redlock: Redlock;
 
-  constructor(private readonly redisConfig: RedisConfig) {}
+  constructor(@Inject(REDIS_CLIENT) private readonly redisClient: Redis) {}
 
   onModuleInit() {
-    const redisUrl = this.redisConfig.redisUrl;
-    if (!redisUrl) {
+    if (!this.redisClient || this.redisClient.status === 'end') {
       this.logger.warn('REDIS_URL not configured. Cron locks will fallback to local execution only.');
       return;
     }
 
     try {
-      this.redisClient = new Redis(redisUrl, {
-        maxRetriesPerRequest: null,
-      });
-
       this.redlock = new Redlock([this.redisClient as any], {
         driftFactor: 0.01, // time in ms
         retryCount: 0, // we don't want to retry acquiring a cron lock; if we miss it, another pod got it.
@@ -39,12 +33,6 @@ export class CronLockService implements OnModuleInit, OnModuleDestroy {
       });
     } catch (err) {
       this.logger.error('Failed to initialize Redlock', err);
-    }
-  }
-
-  onModuleDestroy() {
-    if (this.redisClient) {
-      this.redisClient.disconnect();
     }
   }
 

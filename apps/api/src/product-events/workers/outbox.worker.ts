@@ -1,56 +1,78 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventRouterService } from '../services/event-router.service';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
+import { EventsFeatureConfig } from '../../config/domains/features/events-feature.config';
+import { CronConfig } from '../../config/domains/cron.config';
 
 @Injectable()
-export class OutboxProcessorWorker {
+export class OutboxProcessorWorker implements OnApplicationBootstrap {
   private readonly logger = new Logger(OutboxProcessorWorker.name);
   private isProcessing = false;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventRouter: EventRouterService,
+    private readonly eventsFeatureConfig: EventsFeatureConfig,
+    private readonly cronConfig: CronConfig,
+    private readonly schedulerRegistry: SchedulerRegistry
   ) {}
+
+  onApplicationBootstrap() {
+    const job = new CronJob(this.cronConfig.productOutboxRelayCron, () => {
+      this.processOutbox();
+    });
+    this.schedulerRegistry.addCronJob('ProductOutboxProcessorWorker', job);
+    job.start();
+  }
 
   /**
    * Polls the outbox continuously.
    * In a true distributed system, we might use Debezium (CDC) or Prisma Pulse,
    * but polling is fine for this simulated architecture context.
    */
-  @Cron(CronExpression.EVERY_SECOND)
   async processOutbox() {
     if (this.isProcessing) return;
     this.isProcessing = true;
 
     try {
-      // Find up to 100 PENDING outbox events
-      const events = await this.prisma.outboxEvent.findMany({
-        where: { 
-          status: 'PENDING',
-          OR: [
-            { type: { startsWith: 'Product' } },
-            { type: { startsWith: 'Inventory' } },
-            { type: { startsWith: 'Category' } },
-            { type: { startsWith: 'Brand' } }
-          ]
-        },
-        take: 100,
-        orderBy: { createdAt: 'asc' }
+      let eventsToProcess: string[] = [];
+      await this.prisma.$transaction(async (tx) => {
+        const batchSize = this.eventsFeatureConfig.outboxProcessorBatchSize;
+        const events = await tx.$queryRaw<any[]>`
+          SELECT id 
+          FROM OutboxEvent 
+          WHERE status = 'PENDING' 
+            AND (type LIKE 'Product%' OR type LIKE 'Inventory%' OR type LIKE 'Category%' OR type LIKE 'Brand%')
+          ORDER BY createdAt ASC 
+          LIMIT ${batchSize} 
+          FOR UPDATE SKIP LOCKED
+        `;
+
+        if (events.length === 0) return;
+
+        eventsToProcess = events.map(e => e.id);
+        const { Prisma } = await import('@prisma/client');
+        await tx.$executeRaw`
+          UPDATE OutboxEvent 
+          SET status = 'PROCESSING'
+          WHERE id IN (${Prisma.join(eventsToProcess)})
+        `;
       });
 
-      if (events.length === 0) {
+      if (eventsToProcess.length === 0) {
         this.isProcessing = false;
         return;
       }
 
-      this.logger.debug(`Found ${events.length} PENDING Outbox events...`);
+      this.logger.debug(`Found ${eventsToProcess.length} PENDING Outbox events...`);
 
-      for (const event of events) {
+      for (const eventId of eventsToProcess) {
         try {
-          await this.eventRouter.routeEvent(event.id);
+          await this.eventRouter.routeEvent(eventId);
         } catch (err) {
-          this.logger.error(`Failed to route event ${event.id}. It will be retried later.`);
+          this.logger.error(`Failed to route event ${eventId}. It will be retried later.`);
         }
       }
 

@@ -4,6 +4,7 @@ import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../storage/storage.service';
 import { DocumentGenerationService } from '../../common/document/document-generation.service';
+import { ProcurementFeatureConfig } from '../../config/domains/features/procurement-feature.config';
 
 @Processor('purchase-returns')
 export class PurchaseReturnProcessorService extends WorkerHost {
@@ -12,7 +13,8 @@ export class PurchaseReturnProcessorService extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
-    private readonly documentService: DocumentGenerationService
+    private readonly documentService: DocumentGenerationService,
+    private readonly procurementConfig: ProcurementFeatureConfig
   ) {
     super();
   }
@@ -64,7 +66,7 @@ export class PurchaseReturnProcessorService extends WorkerHost {
 
   private async handleDocuments(data: any) {
     this.logger.log(`Processing RMA attachments for Return ${data.returnId}...`);
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, this.procurementConfig.purchaseReturnProcessorDelayMs));
     return { status: 'ATTACHMENTS_PROCESSED' };
   }
 }

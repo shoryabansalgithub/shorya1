@@ -25,9 +25,7 @@ export class EventRouterService {
     try {
       // 1. Dispatch to Internal Modules (Search, Analytics, Inventory)
       await this.internalQueue.add(event.type, event.payload, {
-        jobId: `internal-${event.id}`,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 1000 }
+        jobId: `internal-${event.id}`
       });
 
       // 2. Dispatch to External Webhooks
@@ -43,9 +41,7 @@ export class EventRouterService {
             eventId: event.id,
             payload: event.payload
           }, {
-            jobId: `webhook-${endpoint.id}-${event.id}`,
-            attempts: 5,
-            backoff: { type: 'exponential', delay: 60000 } // 1m, 2m, 4m, 8m, 16m
+            jobId: `webhook-${endpoint.id}-${event.id}`
           });
         }
       }

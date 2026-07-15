@@ -4,6 +4,7 @@ import { TenantContextService } from '../../iam/tenant-context/tenant-context.se
 import { AdjustmentReason, InventoryStockState, Prisma, StockMovementType } from '@prisma/client';
 import { ProductEventPublisher } from '../../product-events/services/product-event-publisher.service';
 import { StockLedgerService } from '../../stock-ledger-domain/services/stock-ledger.service';
+import { InventoryFeatureConfig } from '../../config/domains/features/inventory-feature.config';
 
 @Injectable()
 export class InventoryDomainService {
@@ -14,6 +15,7 @@ export class InventoryDomainService {
     private readonly tenantContext: TenantContextService,
     private readonly eventPublisher: ProductEventPublisher,
     private readonly stockLedger: StockLedgerService,
+    private readonly inventoryFeatureConfig: InventoryFeatureConfig,
   ) {}
 
   async ensureInventoryItem(productId: string, variantId?: string, explicitLocationId?: string) {
@@ -105,9 +107,9 @@ export class InventoryDomainService {
       where: { id, shopId, isDeleted: false },
       include: {
         product: { select: { id: true, name: true, sku: true, imageUrl: true, unit: true } },
-        adjustments: { take: 20, orderBy: { createdAt: 'desc' } },
-        movements: { take: 20, orderBy: { createdAt: 'desc' } },
-        alerts: { where: { isResolved: false }, take: 10 },
+        adjustments: { take: this.inventoryFeatureConfig.recentAdjustmentsLimit, orderBy: { createdAt: 'desc' } },
+        movements: { take: this.inventoryFeatureConfig.recentMovementsLimit, orderBy: { createdAt: 'desc' } },
+        alerts: { where: { isResolved: false }, take: this.inventoryFeatureConfig.unresolvedAlertsLimit },
       },
     });
     if (!item) throw new NotFoundException('Inventory item not found');
@@ -276,7 +278,7 @@ export class InventoryDomainService {
     return this.prisma.inventoryAdjustment.findMany({
       where: { inventoryItemId, shopId },
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      take: this.inventoryFeatureConfig.inventoryListLimit,
     });
   }
 

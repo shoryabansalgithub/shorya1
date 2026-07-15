@@ -1,70 +1,88 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
+import { BullConfig } from '../../config/domains/bull.config';
+import { CronConfig } from '../../config/domains/cron.config';
+import { EventsFeatureConfig } from '../../config/domains/features/events-feature.config';
 
 @Injectable()
-export class SalesOutboxRelayCron {
+export class SalesOutboxRelayCron implements OnApplicationBootstrap {
   private readonly logger = new Logger(SalesOutboxRelayCron.name);
 
   constructor(
     private readonly prisma: PrismaService,
-    @InjectQueue('sales-events') private readonly salesEventsQueue: Queue
+    @InjectQueue('sales-events') private readonly salesEventsQueue: Queue,
+    private readonly bullConfig: BullConfig,
+    private readonly cronConfig: CronConfig,
+    private readonly eventsConfig: EventsFeatureConfig,
+    private readonly schedulerRegistry: SchedulerRegistry
   ) {}
+
+  onApplicationBootstrap() {
+    const job = new CronJob(this.cronConfig.salesOutboxRelayCron, () => {
+      this.relayPendingEvents();
+    });
+    this.schedulerRegistry.addCronJob('SalesOutboxRelayCron', job);
+    job.start();
+  }
 
   /**
    * Sweeps the OutboxEvent table for PENDING sales events and relays them to BullMQ.
    */
-  @Cron(CronExpression.EVERY_SECOND)
   async relayPendingEvents() {
-    // Only pick up events relevant to Sales domain (prevent overlapping with Product outbox)
-    // A more advanced system would have isolated outboxes, but here we filter by prefix.
-    const pendingEvents = await this.prisma.outboxEvent.findMany({
-      where: {
-        status: 'PENDING',
-        OR: [
-          { type: { startsWith: 'Order' } },
-          { type: { startsWith: 'Invoice' } },
-          { type: { startsWith: 'Payment' } },
-          { type: { startsWith: 'Return' } },
-          { type: { startsWith: 'Exchange' } }
-        ]
-      },
-      take: 50,
-      orderBy: { createdAt: 'asc' }
-    });
+    const batchSize = this.eventsConfig.outboxProcessorBatchSize;
+    
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // 1. Fetch pending events with SKIP LOCKED
+        const events: any[] = await tx.$queryRaw`
+          SELECT id, type, payload, status, retryCount 
+          FROM OutboxEvent 
+          WHERE status = 'PENDING' 
+            AND (type LIKE 'Order%' OR type LIKE 'Invoice%' OR type LIKE 'Payment%' OR type LIKE 'Return%' OR type LIKE 'Exchange%')
+          ORDER BY createdAt ASC 
+          LIMIT ${batchSize} 
+          FOR UPDATE SKIP LOCKED
+        `;
 
-    if (pendingEvents.length === 0) return;
+        if (events.length === 0) return;
 
-    this.logger.log(`Found ${pendingEvents.length} PENDING sales events to relay.`);
+        this.logger.log(`Found ${events.length} PENDING sales events to relay.`);
 
-    for (const event of pendingEvents) {
-      try {
-        // Enqueue to primary router
-        await this.salesEventsQueue.add(event.type, { eventId: event.id, ...event }, {
-          jobId: `sales-event-${event.id}`, // Idempotency key
-          removeOnComplete: true,
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 1000 }
+        // 2. Enqueue into BullMQ
+        const jobs = events.map(event => {
+          return {
+            name: event.type,
+            data: {
+              eventId: event.id,
+              ...event
+            },
+            opts: {
+              jobId: `sales-event-${event.id}`, // Idempotency key
+              removeOnComplete: this.bullConfig.removeOnComplete,
+              attempts: this.bullConfig.defaultAttempts,
+              backoff: { type: (this.bullConfig.backoffType || 'exponential') as 'exponential' | 'fixed', delay: this.bullConfig.backoffDelay }
+            }
+          };
         });
 
-        // Mark as DONE
-        await this.prisma.outboxEvent.update({
-          where: { id: event.id },
-          data: { status: 'DONE', processedAt: new Date() }
-        });
-      } catch (error: any) {
-        this.logger.error(`Failed to enqueue outbox event ${event.id}: ${error.message}`);
-        await this.prisma.outboxEvent.update({
-          where: { id: event.id },
-          data: { 
-            retryCount: { increment: 1 },
-            status: event.retryCount >= 4 ? 'FAILED' : 'PENDING',
-            error: error.message
-          }
-        });
-      }
+        // If BullMQ fails or Redis is down, this throws and the transaction rolls back safely
+        await this.salesEventsQueue.addBulk(jobs);
+
+        // 3. Update status to DONE
+        const eventIds = events.map(e => e.id);
+        const { Prisma } = await import('@prisma/client');
+        await tx.$executeRaw`
+          UPDATE OutboxEvent 
+          SET status = 'DONE', processedAt = NOW(3)
+          WHERE id IN (${Prisma.join(eventIds)})
+        `;
+      });
+    } catch (error: any) {
+      this.logger.error(`Failed to relay sales outbox events: ${error.message}`);
     }
   }
 }

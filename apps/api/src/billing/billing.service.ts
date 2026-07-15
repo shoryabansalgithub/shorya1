@@ -10,6 +10,7 @@ import * as crypto from 'crypto';
 
 
 import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
+import { BillingFeatureConfig } from '../config/domains/features/billing-feature.config';
 
 @Injectable()
 export class BillingService {
@@ -20,7 +21,8 @@ export class BillingService {
     private readonly inventoryGateway: InventoryGateway,
     private readonly inventoryCache: InventoryCacheService,
     private readonly billingHelpers: BillingHelpers,
-    private readonly tenantContext: TenantContextService
+    private readonly tenantContext: TenantContextService,
+    private readonly billingConfig: BillingFeatureConfig
   ) {}
 
   async createInvoice(dto: CreateInvoiceDto, ipAddress: string): Promise<any> {
@@ -569,8 +571,8 @@ export class BillingService {
 
             return invoice;
           }, {
-            timeout: 10000,
-            maxWait: 5000,
+            timeout: this.billingConfig.gatewayTimeoutMs,
+            maxWait: this.billingConfig.transactionMaxWaitMs,
             isolationLevel: 'ReadCommitted' as any
           });
 
@@ -614,7 +616,8 @@ export class BillingService {
 
           if (error.message === 'OPTIMISTIC_LOCK_CONFLICT' && attempt < MAX_RETRIES) {
             this.logger.warn(`Optimistic lock conflict on attempt ${attempt}, retrying...`);
-            await new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
+            const jitterMs = Math.random() * this.billingConfig.jitterDelayRandomMultiplier + this.billingConfig.jitterDelayBaseMs;
+            await new Promise(resolve => setTimeout(resolve, jitterMs));
             const freshProducts = await this.prisma.product.findMany({
               where: { id: { in: productIds } },
               select: {

@@ -7,6 +7,12 @@ import { redisStore } from 'cache-manager-redis-yet';
 
 import { EnterpriseConfigModule } from './config/enterprise-config.module';
 import { RedisConfig } from './config/domains/redis.config';
+import { BullConfig } from './config/domains/bull.config';
+import { CacheConfig } from './config/domains/cache.config';
+import { SecurityConfig } from './config/domains/security.config';
+import { RuntimeValidationModule } from './config/validation/runtime-validation.module';
+import { ConfigurationRegistryModule } from './config/registry/configuration-registry.module';
+import { RedisModule } from './common/redis/redis.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -68,39 +74,48 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
     EnterpriseConfigModule,
+    ConfigurationRegistryModule,
+    RuntimeValidationModule,
     CacheModule.registerAsync({
       isGlobal: true,
-      inject: [RedisConfig],
-      useFactory: async (redisConfig: RedisConfig) => {
+      inject: [RedisConfig, CacheConfig],
+      useFactory: async (redisConfig: RedisConfig, cacheConfig: CacheConfig) => {
         if (redisConfig.redisUrl) {
           return {
             store: redisStore as any,
             url: redisConfig.redisUrl,
-            ttl: 3600 * 1000,
+            ttl: cacheConfig.ttl,
+            max: cacheConfig.maxItems,
           } as any;
         }
-        return { ttl: 3600 * 1000 } as any;
+        return { ttl: cacheConfig.ttl, max: cacheConfig.maxItems } as any;
       },
     }),
     BullModule.forRootAsync({
-      inject: [RedisConfig],
-      useFactory: (redisConfig: RedisConfig) => ({
+      inject: [RedisConfig, BullConfig],
+      useFactory: (redisConfig: RedisConfig, bullConfig: BullConfig) => ({
         connection: {
           url: redisConfig.redisUrl,
         },
         defaultJobOptions: {
-          removeOnComplete: true,
-          removeOnFail: false,
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 1000 },
+          removeOnComplete: bullConfig.removeOnComplete,
+          removeOnFail: bullConfig.removeOnFail,
+          attempts: bullConfig.defaultAttempts,
+          backoff: { 
+            type: bullConfig.backoffType as 'exponential' | 'fixed', 
+            delay: bullConfig.backoffDelay 
+          },
         },
       }),
     }),
-    ThrottlerModule.forRoot([
-      { name: 'short', ttl: 1000, limit: 3 },
-      { name: 'medium', ttl: 10000, limit: 20 },
-      { name: 'long', ttl: 60000, limit: 100 },
-    ]),
+    ThrottlerModule.forRootAsync({
+      inject: [SecurityConfig],
+      useFactory: (securityConfig: SecurityConfig) => [
+        { name: 'short', ttl: securityConfig.rateLimitShortTtl, limit: securityConfig.rateLimitShortLimit },
+        { name: 'medium', ttl: securityConfig.rateLimitMediumTtl, limit: securityConfig.rateLimitMediumLimit },
+        { name: 'long', ttl: securityConfig.rateLimitLongTtl, limit: securityConfig.rateLimitLongLimit },
+      ],
+    }),
     PrismaModule,
     StorageModule,
     UsersModule,
@@ -149,6 +164,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     PurchaseAnalyticsDomainModule,
     PurchaseEventsDomainModule,
     DocumentModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [

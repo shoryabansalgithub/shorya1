@@ -3,8 +3,8 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { BullModule } from '@nestjs/bullmq';
 import { ProductEventPublisher } from './services/product-event-publisher.service';
 import { EventRouterService } from './services/event-router.service';
-import { WebhookDispatcherService } from './services/webhook-dispatcher.service';
-import { EventReplayService } from './services/event-replay.service';
+import { ProductWebhookDispatcherService } from './services/webhook-dispatcher.service';
+import { ProductEventReplayService } from './services/event-replay.service';
 import { OutboxProcessorWorker } from './workers/outbox.worker';
 import { WebhookDeliveryWorker } from './workers/webhook.worker';
 import { ProductEventsController } from './controllers/product-events/product-events.controller';
@@ -24,8 +24,8 @@ import { ScheduleModule } from '@nestjs/schedule';
   providers: [
     ProductEventPublisher,
     EventRouterService,
-    WebhookDispatcherService,
-    EventReplayService,
+    ProductWebhookDispatcherService,
+    ProductEventReplayService,
     OutboxProcessorWorker,
     WebhookDeliveryWorker
   ],

@@ -3,6 +3,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { SalesRedisBroadcaster } from '../services/sales-redis-broadcaster.service';
+import { BullConfig } from '../../config/domains/bull.config';
 
 @Injectable()
 @Processor('sales-events')
@@ -13,7 +14,8 @@ export class SalesEventRouterWorker extends WorkerHost {
     private readonly redisBroadcaster: SalesRedisBroadcaster,
     @InjectQueue('sales-webhooks') private readonly webhooksQueue: Queue,
     @InjectQueue('sales-analytics') private readonly analyticsQueue: Queue,
-    @InjectQueue('sales-notifications') private readonly notificationsQueue: Queue
+    @InjectQueue('sales-notifications') private readonly notificationsQueue: Queue,
+    private readonly bullConfig: BullConfig,
   ) {
     super();
   }
@@ -28,20 +30,20 @@ export class SalesEventRouterWorker extends WorkerHost {
     // 2. Route to Webhooks
     await this.webhooksQueue.add(type, job.data, {
       jobId: `webhook-${eventId}`, // Idempotent
-      attempts: 5,
-      backoff: { type: 'exponential', delay: 2000 }
+      attempts: this.bullConfig.defaultAttempts,
+      backoff: { type: (this.bullConfig.backoffType || 'exponential') as 'exponential' | 'fixed', delay: this.bullConfig.backoffDelay }
     });
 
     // 3. Route to Analytics
     await this.analyticsQueue.add(type, job.data, {
       jobId: `analytics-${eventId}`,
-      attempts: 3
+      attempts: this.bullConfig.defaultAttempts
     });
 
     // 4. Route to Notifications (e.g., Send Email/SMS)
     await this.notificationsQueue.add(type, job.data, {
       jobId: `notify-${eventId}`,
-      attempts: 3
+      attempts: this.bullConfig.defaultAttempts
     });
 
     return { status: 'Routed' };

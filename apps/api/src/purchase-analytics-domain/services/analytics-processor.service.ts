@@ -83,12 +83,21 @@ export class AnalyticsProcessorService extends WorkerHost {
       _count: { _all: true }
     });
 
+    const supplierIds = supplierGroups.map(g => g.supplierId).filter(Boolean);
+    const returnsGroups = await this.prisma.purchaseReturn.groupBy({
+      by: ['supplierId'],
+      where: { shopId, supplierId: { in: supplierIds } },
+      _count: { _all: true }
+    });
+    
+    const returnsMap = new Map(returnsGroups.map(rg => [
+      rg.supplierId, 
+      typeof rg._count === 'number' ? rg._count : (rg._count as any)?._all || 0
+    ]));
+
     for (const group of supplierGroups) {
-      const returnsAgg = await this.prisma.purchaseReturn.aggregate({
-        where: { shopId, supplierId: group.supplierId },
-        _count: { _all: true }
-      });
-      const returnCount = typeof returnsAgg._count === 'number' ? returnsAgg._count : (returnsAgg._count as any)?._all || 0;
+      if (!group.supplierId) continue;
+      const returnCount = returnsMap.get(group.supplierId) || 0;
       const orderCount = typeof group._count === 'number' ? group._count : (group._count as any)?._all || 0;
       const returnRatePct = orderCount > 0 ? (returnCount / orderCount) * 100 : 0;
       

@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
 import { tenantExtension } from './prisma-tenant.extension';
 import { AppConfig, Environment } from '../config/domains/app.config';
+import { PrismaConfig } from '../config/domains/prisma.config';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
@@ -11,20 +12,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   constructor(
     private readonly tenantContextService: TenantContextService,
     appConfig: AppConfig,
+    prismaConfig: PrismaConfig,
   ) {
     const isProduction = appConfig.nodeEnv === Environment.Production;
+    const logLevels = isProduction
+      ? (prismaConfig.logLevelProduction || ['warn', 'error'])
+      : (prismaConfig.logLevelDevelopment || ['query', 'info', 'warn', 'error']);
+
     super({
-      log: isProduction
-        ? [
-            { emit: 'stdout', level: 'warn' },
-            { emit: 'stdout', level: 'error' },
-          ]
-        : [
-            { emit: 'stdout', level: 'query' },
-            { emit: 'stdout', level: 'info' },
-            { emit: 'stdout', level: 'warn' },
-            { emit: 'stdout', level: 'error' },
-          ],
+      log: logLevels.map(level => ({ emit: 'stdout', level })) as any,
     });
 
     const extended = this.$extends(tenantExtension(this.tenantContextService));

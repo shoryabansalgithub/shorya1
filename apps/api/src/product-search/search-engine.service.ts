@@ -5,14 +5,17 @@ import { Product, ProductVariant } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject } from '@nestjs/common';
 import type { Cache } from 'cache-manager';
+import { SearchFeatureConfig } from '../config/domains/features/search-feature.config';
+import { CacheConfig } from '../config/domains/cache.config';
 
 @Injectable()
 export class SearchEngineService {
   private readonly logger = new Logger(SearchEngineService.name);
 
-  constructor(
-    private readonly prisma: PrismaService,
+  constructor(private readonly prisma: PrismaService,
+    private readonly searchFeatureConfig: SearchFeatureConfig,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig
   ) {}
 
   /**
@@ -64,7 +67,7 @@ export class SearchEngineService {
           where: { isPrimary: true }
         }
       },
-      take: 100, // Fetch up to 100 candidates for fuzzy scoring
+      take: this.searchFeatureConfig.fuzzyCandidateLimit, // Fetch configurable limit for fuzzy scoring
     });
 
     // 3. Typo Tolerance and Fuzzy Scoring using `fuzzysort`
@@ -92,7 +95,7 @@ export class SearchEngineService {
     const finalResults = rankedProducts.slice(0, limit);
 
     // 5. Cache the result for subsequent requests
-    await this.cacheManager.set(cacheKey, finalResults, 1000 * 60 * 5); // 5 mins TTL
+    await this.cacheManager.set(cacheKey, finalResults, this.cacheConfig.searchEngineTtlMs); // 5 mins TTL
 
     return finalResults;
   }
@@ -115,10 +118,11 @@ export class SearchEngineService {
         name: { startsWith: query }
       },
       select: { id: true, name: true },
-      take: 5
+      orderBy: { name: 'asc' },
+      take: this.searchFeatureConfig.searchResultLimit
     });
 
-    await this.cacheManager.set(cacheKey, products, 1000 * 60 * 60); // 1 hour TTL
+    await this.cacheManager.set(cacheKey, products, this.cacheConfig.searchEngineTtlMs); // 1 hour TTL
     return products;
   }
 }

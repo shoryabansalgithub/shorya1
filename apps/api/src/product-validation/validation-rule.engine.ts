@@ -4,6 +4,7 @@ import { ValidationSeverity } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject } from '@nestjs/common';
 import type { Cache } from 'cache-manager';
+import { CacheConfig } from '../config/domains/cache.config';
 
 export interface ValidationRuleConfig {
   id: string;
@@ -17,9 +18,9 @@ export interface ValidationRuleConfig {
 export class ValidationRuleEngine {
   private readonly logger = new Logger(ValidationRuleEngine.name);
 
-  constructor(
-    private readonly prisma: PrismaService,
+  constructor(private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig
   ) {}
 
   /**
@@ -47,7 +48,7 @@ export class ValidationRuleEngine {
     }));
 
     // Cache rules for 15 minutes
-    await this.cacheManager.set(cacheKey, mappedRules, 1000 * 60 * 15);
+    await this.cacheManager.set(cacheKey, mappedRules, this.cacheConfig.validationRuleEngineTtlMs);
     
     return mappedRules;
   }

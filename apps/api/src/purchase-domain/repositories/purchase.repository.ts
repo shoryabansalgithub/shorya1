@@ -12,11 +12,11 @@ import { PurchaseTaxService } from '../services/purchase-tax.service';
 import { Prisma, PurchaseOrderStatus } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
+import { CacheConfig } from '../../config/domains/cache.config';
 
 @Injectable()
 export class PurchaseRepository {
-  constructor(
-    private readonly prisma: PrismaService,
+  constructor(private readonly prisma: PrismaService,
     private readonly numberEngine: PurchaseNumberEngine,
     private readonly lifecycle: PurchaseLifecycleService,
     private readonly validation: PurchaseValidationService,
@@ -26,7 +26,8 @@ export class PurchaseRepository {
     private readonly pricing: PurchasePricingService,
     private readonly tax: PurchaseTaxService,
     private readonly eventPublisher: SalesEventPublisher,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig
   ) {}
 
   async createPurchaseOrder(shopId: string, payload: any, actorId: string, ipAddress?: string) {
@@ -123,7 +124,7 @@ export class PurchaseRepository {
       throw new NotFoundException(`Purchase Order ${id} not found.`);
     }
 
-    await this.cacheManager.set(cacheKey, po, 60000); // 1 minute cache
+    await this.cacheManager.set(cacheKey, po, this.cacheConfig.purchaseTtlMs); // 1 minute cache
     return po;
   }
 

@@ -2,7 +2,6 @@ import { Body, Controller, Get, Post, Request, UseGuards, Delete, Param, Ip, Hea
 import { LocalAuthGuard } from './local-auth.guard';
 import { AuthService, LoginResponseDto } from './auth.service';
 import { Public } from './public.decorator';
-import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -29,7 +28,6 @@ export class AuthController {
   ) {}
 
   @Public()
-  @Throttle({ short: { limit: 3, ttl: 1000 }, medium: { limit: 10, ttl: 10000 }, long: { limit: 30, ttl: 30000 } })
   @Post('register')
   @ApiOperation({ summary: 'Register a new user (defaults to CASHIER role for security)' })
   @ApiBody({ type: CreateUserDto })
@@ -48,7 +46,6 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ short: { limit: 5, ttl: 1000 }, medium: { limit: 15, ttl: 10000 }, long: { limit: 30, ttl: 30000 } })
   @UseGuards(LocalAuthGuard)
   @Post('login')
   @ApiOperation({ summary: 'Login with email and password' })
@@ -57,7 +54,6 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ short: { limit: 5, ttl: 1000 }, medium: { limit: 15, ttl: 10000 }, long: { limit: 30, ttl: 30000 } })
   @Post('google')
   @ApiOperation({ summary: 'Authenticate or register via Google OAuth' })
   @ApiBody({ type: GoogleAuthDto })
@@ -73,6 +69,19 @@ export class AuthController {
       body.name,
     );
     return this.authService.login(user, ip, userAgent);
+  }
+
+  @Public()
+  @Post('refresh')
+  @ApiOperation({ summary: 'Refresh access token using refresh token' })
+  @ApiBody({ schema: { type: 'object', properties: { refresh_token: { type: 'string' } } } })
+  @ApiResponse({ status: 200, type: SafeUserDto })
+  async refresh(
+    @Body('refresh_token') refreshToken: string,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent: string,
+  ): Promise<LoginResponseDto> {
+    return this.authService.refresh(refreshToken, ip, userAgent);
   }
 
   @Get('sessions')

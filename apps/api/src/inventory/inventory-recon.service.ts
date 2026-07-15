@@ -1,14 +1,18 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Injectable, Logger, Inject, OnApplicationBootstrap } from '@nestjs/common';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { CronLockService } from '../common/cron-lock/cron-lock.service';
 import { DriftAlertService } from './drift-alert.service';
 import { DriftStatus } from '@prisma/client';
+import { InventoryFeatureConfig } from '../config/domains/features/inventory-feature.config';
+import { CronConfig } from '../config/domains/cron.config';
+import { CacheConfig } from '../config/domains/cache.config';
 
 @Injectable()
-export class InventoryReconService {
+export class InventoryReconService implements OnApplicationBootstrap {
   private readonly logger = new Logger(InventoryReconService.name);
   private redis: any = null;
 
@@ -17,6 +21,10 @@ export class InventoryReconService {
     private prisma: PrismaService,
     private cronLockService: CronLockService,
     private driftAlertService: DriftAlertService,
+    private inventoryConfig: InventoryFeatureConfig,
+    private cronConfig: CronConfig,
+    private schedulerRegistry: SchedulerRegistry,
+    private cacheConfig: CacheConfig,
   ) {
     try {
       const cacheAny = this.cache as any;
@@ -29,12 +37,19 @@ export class InventoryReconService {
     }
   }
 
-  // Run scheduled reconciliation every 5 minutes
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  onApplicationBootstrap() {
+    const job = new CronJob(this.cronConfig.inventoryReconCron, () => {
+      this.handleCron();
+    });
+    this.schedulerRegistry.addCronJob('InventoryRecon', job);
+    job.start();
+  }
+
+  // Run scheduled reconciliation
   async handleCron() {
     await this.cronLockService.withLock(
       'inventory-reconciliation',
-      10 * 60 * 1000, // 10 minutes TTL
+      this.inventoryConfig.reconLockTtlMs, // Configured TTL
       async () => {
         await this.runReconciliation();
       }
@@ -54,8 +69,8 @@ export class InventoryReconService {
     let driftsFound = 0;
     let driftsFixed = 0;
 
-    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
-    const batchSize = 1000;
+    const fifteenMinsAgo = new Date(Date.now() - this.inventoryConfig.reconLookbackMs);
+    const batchSize = this.inventoryConfig.reconBatchSize;
     let skip = 0;
 
     try {
@@ -131,7 +146,7 @@ export class InventoryReconService {
 
               // 3. Attempt Redis Repair
               try {
-                await this.redis.set(`stock:${product.shopId}:${product.id}`, prismaStock.toString(), 'EX', 3600);
+                await this.redis.set(`stock:${product.shopId}:${product.id}`, prismaStock.toString(), 'EX', this.cacheConfig.inventoryDriftTtlSeconds);
                 
                 // Repair successful
                 await this.prisma.inventoryDriftLog.update({

@@ -1,23 +1,27 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSalesOrderDto } from '../dto/create-sales-order.dto';
+import { SalesFeatureConfig } from '../../config/domains/features/sales-feature.config';
 
 @Injectable()
 export class FraudHoldEngine {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly salesConfig: SalesFeatureConfig
+  ) {}
 
   /**
    * Evaluates order for suspicious activity.
    */
   async evaluate(shopId: string, orderId: string, dto: CreateSalesOrderDto, totalAmount: number): Promise<boolean> {
-    // Simple mock logic: Hold if amount > $10,000
-    if (totalAmount > 10000) {
+    // Simple mock logic: Hold if amount > threshold
+    if (totalAmount > this.salesConfig.creditHoldThreshold) {
       await this.prisma.orderHold.create({
         data: {
           shopId,
           orderId,
           holdType: 'FRAUD',
-          reason: 'Order amount exceeds $10,000 automated threshold'
+          reason: `Order amount exceeds $${this.salesConfig.creditHoldThreshold} automated threshold`
         }
       });
       return true;

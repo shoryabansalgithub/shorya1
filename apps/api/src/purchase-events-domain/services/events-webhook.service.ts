@@ -20,20 +20,28 @@ export class EventsWebhookService {
       where: { shopId, isActive: true }
     });
 
+    const jobsToEnqueue = [];
+
     for (const endpoint of endpoints) {
       const subscribedEvents = endpoint.events as string[];
       if (subscribedEvents.includes('*') || subscribedEvents.includes(type)) {
-        this.logger.debug(`Enqueuing webhook delivery for endpoint ${endpoint.id} and event ${outboxEventId}`);
-        await this.webhookQueue.add('deliver-webhook', {
-          endpointId: endpoint.id,
-          eventId: outboxEventId,
-          payload
-        }, {
-          jobId: `webhook-${endpoint.id}-${outboxEventId}`,
-          attempts: 5,
-          backoff: { type: 'exponential', delay: 60000 }
+        jobsToEnqueue.push({
+          name: 'deliver-webhook',
+          data: {
+            endpointId: endpoint.id,
+            eventId: outboxEventId,
+            payload
+          },
+          opts: {
+            jobId: `webhook-${endpoint.id}-${outboxEventId}`
+          }
         });
       }
+    }
+
+    if (jobsToEnqueue.length > 0) {
+      this.logger.debug(`Enqueuing ${jobsToEnqueue.length} webhook deliveries for event ${outboxEventId}`);
+      await this.webhookQueue.addBulk(jobsToEnqueue);
     }
   }
 }

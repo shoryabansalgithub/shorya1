@@ -59,12 +59,14 @@ export class ProductsService {
     return product;
   }
 
-  async findAll() {
+  async findAll(limit: number = 50, offset: number = 0) {
     const shopId = this.tenantContext.getShopId();
     return this.prisma.product.findMany({
       where: { shopId, isDeleted: false },
       include: { category: true, brand: true },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset,
     });
   }
 

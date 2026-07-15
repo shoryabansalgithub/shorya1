@@ -9,18 +9,19 @@ import { GrnIntegrationService } from '../services/grn-integration.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
+import { CacheConfig } from '../../config/domains/cache.config';
 
 @Injectable()
 export class GrnRepository {
-  constructor(
-    private readonly prisma: PrismaService,
+  constructor(private readonly prisma: PrismaService,
     private readonly lifecycle: GrnLifecycleService,
     private readonly approval: GrnApprovalService,
     private readonly inspection: GrnInspectionService,
     private readonly variance: GrnVarianceService,
     private readonly integration: GrnIntegrationService,
     private readonly eventPublisher: SalesEventPublisher,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig
   ) {}
 
   async createGoodsReceipt(shopId: string, payload: any, actorId: string, ipAddress?: string) {
@@ -107,7 +108,7 @@ export class GrnRepository {
       throw new NotFoundException(`Goods Receipt ${id} not found.`);
     }
 
-    await this.cacheManager.set(cacheKey, grn, 60000); 
+    await this.cacheManager.set(cacheKey, grn, this.cacheConfig.grnTtlMs); 
     return grn;
   }
 

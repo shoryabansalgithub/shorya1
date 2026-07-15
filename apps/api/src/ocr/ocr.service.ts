@@ -1,7 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiConfig } from '../config/domains/ai.config';
-import Fuse from 'fuse.js';
+import { OcrFeatureConfig } from '../config/domains/features/ocr-feature.config';
 
 import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
 
@@ -12,6 +12,7 @@ export class OcrService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiConfig: AiConfig,
+    private readonly ocrConfig: OcrFeatureConfig,
     private readonly tenantContext: TenantContextService
   ) {}
 
@@ -68,7 +69,7 @@ Example: [{"rawName": "Maggi Noodles", "qty": 2, "price": 14.50}]`;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000); // 30s hard timeout
+        const timeout = setTimeout(() => controller.abort(), this.ocrConfig.timeoutMs);
 
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
           method: 'POST',
@@ -81,7 +82,7 @@ Example: [{"rawName": "Maggi Noodles", "qty": 2, "price": 14.50}]`;
         if (!response.ok) {
           const errBody = await response.text();
           if (RETRYABLE_STATUSES.includes(response.status) && attempt < MAX_RETRIES) {
-            const backoffMs = Math.pow(2, attempt) * 1000; // 2s, 4s
+            const backoffMs = Math.pow(2, attempt) * (this.ocrConfig.backoffMs / 2);
             this.logger.warn(`Gemini returned ${response.status}, retrying in ${backoffMs}ms (attempt ${attempt}/${MAX_RETRIES})`);
             await new Promise(r => setTimeout(r, backoffMs));
             continue;
@@ -103,7 +104,7 @@ Example: [{"rawName": "Maggi Noodles", "qty": 2, "price": 14.50}]`;
         }
       } catch (fetchErr: any) {
         if (fetchErr?.name === 'AbortError' && attempt < MAX_RETRIES) {
-          const backoffMs = Math.pow(2, attempt) * 1000;
+          const backoffMs = Math.pow(2, attempt) * (this.ocrConfig.backoffMs / 2);
           this.logger.warn(`Gemini request timed out, retrying in ${backoffMs}ms (attempt ${attempt}/${MAX_RETRIES})`);
           await new Promise(r => setTimeout(r, backoffMs));
           continue;
@@ -118,20 +119,31 @@ Example: [{"rawName": "Maggi Noodles", "qty": 2, "price": 14.50}]`;
   }
 
   private async fuzzyMatchProducts(extractedItems: any[]): Promise<any[]> {
-    this.logger.log('Running Fuse.js fuzzy matching against real inventory...');
+    this.logger.log('Running DB-backed text search against real inventory...');
     
     const shopId = this.tenantContext.getShopId();
-    const inventory = await this.prisma.product.findMany({
-      where: { shopId, isDeleted: false, isActive: true },
-      select: { id: true, name: true, sellingPrice: true }
-    });
+    
+    const matched = await Promise.all(extractedItems.map(async (item) => {
+      const keywords = item.rawName.split(' ').filter((k: string) => k.length > 2);
+      
+      let whereClause: any = { shopId, isDeleted: false, isActive: true };
+      if (keywords.length > 0) {
+        whereClause.AND = keywords.map((kw: string) => ({
+          name: { contains: kw, mode: 'insensitive' }
+        }));
+      } else {
+        whereClause.name = { contains: item.rawName, mode: 'insensitive' };
+      }
 
-    const fuse = new Fuse(inventory, { keys: ['name'], threshold: 0.4 });
+      const results = await this.prisma.product.findMany({
+        where: whereClause,
+        select: { id: true, name: true, sellingPrice: true },
+        take: 3
+      });
 
-    return extractedItems.map(item => {
-      const results = fuse.search(item.rawName);
       if (results.length > 0) {
-        const match = results[0].item;
+        // Simple client-side exact/best match tie-breaker
+        const match = results.find(r => r.name.toLowerCase() === item.rawName.toLowerCase()) || results[0];
         return {
           ...item,
           matchedSku: match.id,
@@ -147,6 +159,8 @@ Example: [{"rawName": "Maggi Noodles", "qty": 2, "price": 14.50}]`;
         dbPrice: null,
         confidence: 0.2
       };
-    });
+    }));
+
+    return matched;
   }
 }

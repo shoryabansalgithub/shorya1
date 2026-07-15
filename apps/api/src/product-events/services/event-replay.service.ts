@@ -3,8 +3,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 
 @Injectable()
-export class EventReplayService {
-  private readonly logger = new Logger(EventReplayService.name);
+export class ProductEventReplayService {
+  private readonly logger = new Logger(ProductEventReplayService.name);
 
   constructor(private readonly prisma: PrismaService) {}
 

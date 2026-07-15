@@ -4,6 +4,7 @@ import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../storage/storage.service';
 import { DocumentGenerationService } from '../../common/document/document-generation.service';
+import { ProcurementFeatureConfig } from '../../config/domains/features/procurement-feature.config';
 
 @Processor('grn-jobs')
 export class GrnProcessorService extends WorkerHost {
@@ -12,7 +13,8 @@ export class GrnProcessorService extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
-    private readonly documentService: DocumentGenerationService
+    private readonly documentService: DocumentGenerationService,
+    private readonly procurementConfig: ProcurementFeatureConfig
   ) {
     super();
   }
@@ -66,13 +68,13 @@ export class GrnProcessorService extends WorkerHost {
 
   private async handleBarcodeGeneration(data: any) {
     this.logger.log(`Generating Barcodes for GRN ${data.grnId}...`);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, this.procurementConfig.grnProcessorBarcodeDelayMs));
     return { status: 'GENERATED' };
   }
 
   private async handleAttachment(data: any) {
     this.logger.log(`Processing attachment ${data.attachmentId}...`);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, this.procurementConfig.grnProcessorAttachmentDelayMs));
     return { status: 'PROCESSED' };
   }
 }

@@ -42,21 +42,9 @@ export class AnalyticsEventListener implements OnModuleInit {
     await this.cacheManager.del(cacheKey);
     
     // 2. Queue heavy rebuilding operation in the background
-    await this.analyticsQueue.add('aggregate-daily-dashboard', { shopId }, {
-      removeOnComplete: true,
-      attempts: 3
-    });
-    await this.analyticsQueue.add('aggregate-vendor-performance', { shopId }, {
-      removeOnComplete: true,
-      attempts: 3
-    });
-    await this.analyticsQueue.add('aggregate-category-spend', { shopId }, {
-      removeOnComplete: true,
-      attempts: 3
-    });
-    await this.analyticsQueue.add('aggregate-trends', { shopId }, {
-      removeOnComplete: true,
-      attempts: 3
-    });
+    await this.analyticsQueue.add('aggregate-daily-dashboard', { shopId });
+    await this.analyticsQueue.add('aggregate-vendor-performance', { shopId });
+    await this.analyticsQueue.add('aggregate-category-spend', { shopId });
+    await this.analyticsQueue.add('aggregate-trends', { shopId });
   }
 }

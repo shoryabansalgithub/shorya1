@@ -6,6 +6,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../iam/guards/tenant.guard';
+import { ImportExportFeatureConfig } from '../config/domains/features/import-export-feature.config';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
 @Controller('imports')
@@ -14,6 +15,7 @@ export class ImportExportController {
     private readonly storageService: FileStorageService,
     private readonly prisma: PrismaService,
     @InjectQueue('import-job') private readonly importQueue: Queue,
+    private readonly importExportFeatureConfig: ImportExportFeatureConfig,
   ) {}
 
   @Post('products/upload')
@@ -56,8 +58,8 @@ export class ImportExportController {
   async getJobErrors(@Param('id') id: string, @Req() req: any) {
     return this.prisma.importJobRow.findMany({
       where: { importJobId: id, status: 'ERROR', importJob: { shopId: req.shop.id } },
-      take: 100
+      orderBy: { createdAt: 'desc' },
+      take: this.importExportFeatureConfig.exportListLimit
     });
   }
 }
-

@@ -1,13 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EventsFeatureConfig } from '../../config/domains/features/events-feature.config';
 import * as crypto from 'crypto';
 import axios from 'axios';
 
 @Injectable()
-export class WebhookDispatcherService {
-  private readonly logger = new Logger(WebhookDispatcherService.name);
+export class ProductWebhookDispatcherService {
+  private readonly logger = new Logger(ProductWebhookDispatcherService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventsConfig: EventsFeatureConfig
+  ) {}
 
   /**
    * Dispatches the webhook and returns true if successful.
@@ -45,7 +49,7 @@ export class WebhookDispatcherService {
           'x-dukanai-event': event.type,
           'x-dukanai-delivery': eventId
         },
-        timeout: 10000 // 10s timeout
+        timeout: this.eventsConfig.webhookTimeoutMs
       });
 
       await this.prisma.webhookDelivery.create({

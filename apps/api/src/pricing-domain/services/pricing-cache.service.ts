@@ -1,10 +1,13 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
+import { CacheConfig } from '../../config/domains/cache.config';
 
 @Injectable()
 export class PricingCacheService {
-  constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache) {}
+  constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig
+  ) {}
 
   /**
    * Retrieves aggressively cached simulated pricing.
@@ -17,7 +20,7 @@ export class PricingCacheService {
   async setSimulatedPricing(shopId: string, cacheKey: string, payload: any): Promise<void> {
     const key = `shop:${shopId}:pricing:${cacheKey}`;
     // Cache for 1 hour, rebuilt automatically by background worker if rules change
-    await this.cacheManager.set(key, payload, 3600000); 
+    await this.cacheManager.set(key, payload, this.cacheConfig.pricingTtlMs); 
   }
 
   /**

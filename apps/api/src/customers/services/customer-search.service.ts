@@ -2,12 +2,13 @@ import { Injectable, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CacheConfig } from '../../config/domains/cache.config';
 
 @Injectable()
 export class CustomerSearchService {
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache
+  constructor(private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig
   ) {}
 
   async search(shopId: string, query: string, skip: number = 0, take: number = 20) {
@@ -36,7 +37,7 @@ export class CustomerSearchService {
       orderBy: { createdAt: 'desc' }
     });
 
-    await this.cacheManager.set(cacheKey, results, 60000); // 60s cache
+    await this.cacheManager.set(cacheKey, results, this.cacheConfig.customerSearchTtlMs); // 60s cache
     return results;
   }
 }

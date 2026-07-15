@@ -30,24 +30,55 @@ export class SalesOrderService {
     // 2. Generate Transaction-Safe Order Number
     const orderNumber = await this.orderNumberEngine.generateOrderNumber(shopId);
 
-    // 3. Calculate Financials
-    let subTotal = 0;
-    let taxTotal = 0;
-    let discountTotal = 0;
+    const productIds = dto.lines.map(l => l.productId);
+    const variantIds = dto.lines.map(l => l.variantId).filter(Boolean) as string[];
 
-    for (const line of dto.lines) {
-      const lineNet = line.quantity * (line.unitPrice - (line.discount || 0));
-      const lineTax = lineNet * ((line.taxRate || 0) / 100);
-      
-      subTotal += lineNet;
-      taxTotal += lineTax;
-      discountTotal += (line.discount || 0) * line.quantity;
-    }
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds }, shopId },
+      include: { variants: true }
+    });
 
-    const grandTotal = subTotal + taxTotal;
+    const productMap = new Map(products.map(p => [p.id, p]));
 
     // 4. Execute Transaction (Outbox Pattern included)
     const result = await this.prisma.$transaction(async (tx) => {
+      // 3. Calculate Financials securely
+      let subTotal = 0;
+      let taxTotal = 0;
+      let discountTotal = 0;
+
+      const serverLines = dto.lines.map(l => {
+        const product = productMap.get(l.productId);
+        if (!product) throw new Error(`Product ${l.productId} not found`);
+        const variant = l.variantId ? product.variants.find(v => v.id === l.variantId) : null;
+
+        const unitPrice = variant ? Number(variant.sellingPrice) : Number(product.sellingPrice);
+        const discount = 0; // Configurable discount not provided safely, fallback to 0
+        const taxRate = 0; // Tax engine should provide this, fallback to 0
+
+        const lineNet = l.quantity * (unitPrice - discount);
+        const lineTax = lineNet * (taxRate / 100);
+        
+        subTotal += lineNet;
+        taxTotal += lineTax;
+        discountTotal += discount * l.quantity;
+
+        return {
+          shopId,
+          productId: l.productId,
+          variantId: l.variantId,
+          sku: variant?.sku || null,
+          productName: product.name,
+          quantity: l.quantity,
+          unitPrice,
+          discount,
+          taxRate,
+          lineTotal: lineNet
+        };
+      });
+
+      const grandTotal = subTotal + taxTotal;
+
       // Create Core Order
       const order = await tx.salesOrder.create({
         data: {
@@ -62,18 +93,7 @@ export class SalesOrderService {
           grandTotal,
           createdBy: actorId,
           lines: {
-            create: dto.lines.map(l => ({
-              shopId,
-              productId: l.productId,
-              variantId: l.variantId,
-              sku: null, // Would fetch from product in real scenario
-              productName: 'Frozen Name', // Would fetch from product
-              quantity: l.quantity,
-              unitPrice: l.unitPrice,
-              discount: l.discount || 0,
-              taxRate: l.taxRate || 0,
-              lineTotal: l.quantity * (l.unitPrice - (l.discount || 0))
-            }))
+            create: serverLines
           }
         },
         include: { lines: true }
@@ -122,13 +142,11 @@ export class SalesOrderService {
         }
       );
 
+      // 5. Asynchronous Snapshotting moved inside TX to preserve audit integrity
+      await this.snapshotEngine.createSnapshotsBulk(order.id, shopId, dto.lines, tx);
+
       return order;
     });
-
-    // 5. Asynchronous Snapshotting (Outside TX to keep TX fast, or could be inside)
-    for (const line of dto.lines) {
-      await this.snapshotEngine.createSnapshot(result.id, shopId, line.productId, line.variantId || null);
-    }
 
     return result;
   }

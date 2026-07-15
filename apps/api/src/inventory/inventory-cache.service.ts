@@ -3,6 +3,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
+import { CacheConfig } from '../config/domains/cache.config';
 
 @Injectable()
 export class InventoryCacheService {
@@ -13,6 +14,7 @@ export class InventoryCacheService {
     @Inject(CACHE_MANAGER) private cache: Cache,
     private prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly cacheConfig: CacheConfig
   ) {
     // Safely attempt to access the underlying Redis client.
     // Falls back to null if the cache store is not Redis (e.g., in-memory).
@@ -36,20 +38,38 @@ export class InventoryCacheService {
   async warmCache(): Promise<void> {
     if (!this.redis) return;
     const shopId = this.tenantContext.getShopId();
-    const products = await this.prisma.product.findMany({
-      where: { shopId, isDeleted: false },
-      select: { id: true, currentStock: true },
-    });
-    const pipeline = this.redis.pipeline();
-    for (const p of products) {
-      pipeline.set(
-        `stock:${shopId}:${p.id}`,
-        p.currentStock.toNumber().toString(),
-        'EX',
-        3600,
-      ); // 1 hour TTL
+    
+    let skip = 0;
+    const take = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      const products = await this.prisma.product.findMany({
+        where: { shopId, isDeleted: false },
+        select: { id: true, currentStock: true },
+        take,
+        skip,
+        orderBy: { id: 'asc' },
+      });
+
+      if (products.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      const pipeline = this.redis.pipeline();
+      for (const p of products) {
+        pipeline.set(
+          `stock:${shopId}:${p.id}`,
+          p.currentStock.toNumber().toString(),
+          'EX',
+          this.cacheConfig.inventoryStockTtlSeconds,
+        );
+      }
+      await pipeline.exec();
+      
+      skip += take;
     }
-    await pipeline.exec();
   }
 
   // Atomic pre-decrement in Redis (BEFORE the DB transaction)
@@ -105,6 +125,6 @@ export class InventoryCacheService {
   ): Promise<void> {
     if (!this.redis) return;
     const shopId = this.tenantContext.getShopId();
-    await this.redis.set(`stock:${shopId}:${productId}`, newStock.toString(), 'EX', 3600);
+    await this.redis.set(`stock:${shopId}:${productId}`, newStock.toString(), 'EX', this.cacheConfig.inventoryStockTtlSeconds);
   }
 }

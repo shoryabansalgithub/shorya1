@@ -10,11 +10,13 @@ export class InventoryService {
     private readonly tenantContext: TenantContextService
   ) {}
 
-  async getProducts() {
+  async getProducts(limit: number = 50, offset: number = 0) {
     const shopId = this.tenantContext.getShopId();
     return this.prisma.product.findMany({
       where: { shopId, isDeleted: false, isActive: true },
       orderBy: { name: 'asc' },
+      take: limit,
+      skip: offset,
     });
   }
 }

@@ -1,22 +1,35 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
+import { EventsFeatureConfig } from '../../config/domains/features/events-feature.config';
+import { CronConfig } from '../../config/domains/cron.config';
 
 @Injectable()
-export class OutboxRelayService {
+export class OutboxRelayService implements OnApplicationBootstrap {
   private readonly logger = new Logger(OutboxRelayService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue('system-events') private readonly eventQueue: Queue,
+    private readonly eventsConfig: EventsFeatureConfig,
+    private readonly cronConfig: CronConfig,
+    private readonly schedulerRegistry: SchedulerRegistry
   ) {}
 
-  @Cron(CronExpression.EVERY_5_SECONDS)
+  onApplicationBootstrap() {
+    const job = new CronJob(this.cronConfig.eventsOutboxRelayCron, () => {
+      this.relayEvents();
+    });
+    this.schedulerRegistry.addCronJob('EventsOutboxRelayService', job);
+    job.start();
+  }
+
   async relayEvents() {
-    const batchSize = 100;
+    const batchSize = this.eventsConfig.outboxProcessorBatchSize;
     
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -48,8 +61,6 @@ export class OutboxRelayService {
             },
             opts: {
               jobId: event.id, // Guarantee exactly-once enqueue via BullMQ jobId deduplication
-              attempts: 3,
-              backoff: { type: 'exponential', delay: 1000 },
             }
           };
         });

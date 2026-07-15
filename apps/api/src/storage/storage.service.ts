@@ -5,9 +5,11 @@ import {
   Logger,
   NotFoundException,
   UnauthorizedException,
+  Inject
 } from '@nestjs/common';
 import { StorageConfig } from '../config/domains/storage.config';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { S3_CLIENT } from './storage.module';
 import archiver from 'archiver';
 import * as crypto from 'crypto';
 import * as fs from 'fs-extra';
@@ -31,23 +33,13 @@ import { TenantContextService } from '../iam/tenant-context/tenant-context.servi
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
-  private readonly s3Client: S3Client;
-
   constructor(
     private readonly storageConfig: StorageConfig,
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
     private readonly storagePathBuilder: StoragePathBuilder,
-  ) {
-    this.s3Client = new S3Client({
-      region: this.storageConfig.s3Region || 'auto',
-      endpoint: this.storageConfig.s3Endpoint,
-      credentials: {
-        accessKeyId: this.storageConfig.s3AccessKey || '',
-        secretAccessKey: this.storageConfig.s3SecretKey || '',
-      },
-    });
-  }
+    @Inject(S3_CLIENT) private readonly s3Client: S3Client,
+  ) {}
 
   private async ensureJsonFile(
     filePath: string,

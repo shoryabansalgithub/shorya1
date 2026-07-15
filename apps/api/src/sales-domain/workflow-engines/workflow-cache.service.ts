@@ -1,10 +1,14 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
+import { CacheConfig } from '../../config/domains/cache.config';
 
 @Injectable()
 export class WorkflowCacheService {
-  constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache) {}
+  constructor(
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig,
+  ) {}
 
   async getWorkflowState(shopId: string, orderId: string): Promise<any | null> {
     const key = `shop:${shopId}:workflow:${orderId}`;
@@ -13,6 +17,6 @@ export class WorkflowCacheService {
 
   async setWorkflowState(shopId: string, orderId: string, payload: any): Promise<void> {
     const key = `shop:${shopId}:workflow:${orderId}`;
-    await this.cacheManager.set(key, payload, 300000); // 5 mins
+    await this.cacheManager.set(key, payload, this.cacheConfig.salesOrderTtlMs);
   }
 }

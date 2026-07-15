@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -6,9 +6,11 @@ import { SafeUserDto } from '../users/dto/safe-user.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
 import { SocketSessionService } from '../iam/websockets/socket-session.service';
+import { JwtConfig } from '../config/domains/jwt.config';
 
 export interface LoginResponseDto {
   access_token: string;
+  refresh_token: string;
   user: SafeUserDto;
 }
 
@@ -19,6 +21,7 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private socketSessionService: SocketSessionService,
+    private jwtConfig: JwtConfig,
   ) {}
 
   async validateUser(email: string, pass: string): Promise<SafeUserDto | null> {
@@ -56,7 +59,9 @@ export class AuthService {
     // Create a refresh token (session)
     const refreshToken = crypto.randomBytes(40).toString('hex');
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    const match = this.jwtConfig.jwtRefreshExpiresIn.match(/^(\d+)/);
+    const days = match ? parseInt(match[1], 10) : 7;
+    expiresAt.setDate(expiresAt.getDate() + days);
 
     await this.prisma.refreshToken.create({
       data: {
@@ -70,8 +75,33 @@ export class AuthService {
 
     return {
       access_token: this.jwtService.sign(payload),
+      refresh_token: refreshToken,
       user,
     };
+  }
+
+  async refresh(refreshToken: string, ipAddress?: string, userAgent?: string): Promise<LoginResponseDto> {
+    const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    const session = await this.prisma.refreshToken.findFirst({
+      where: { token: hashedToken }
+    });
+
+    if (!session || session.isRevoked || session.expiresAt < new Date()) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const user = await this.usersService.findSafeById(session.userId);
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User inactive or deleted');
+    }
+
+    // Revoke old session
+    await this.prisma.refreshToken.update({
+      where: { id: session.id },
+      data: { isRevoked: true }
+    });
+
+    return this.login(user, ipAddress, userAgent);
   }
 
   async getSessions(userId: string) {

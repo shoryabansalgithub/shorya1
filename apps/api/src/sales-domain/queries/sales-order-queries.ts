@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SalesFeatureConfig } from '../../config/domains/features/sales-feature.config';
 
 @Injectable()
 export class SalesOrderQueries {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly salesConfig: SalesFeatureConfig
+  ) {}
 
   /**
    * Enterprise-grade Search Query for Sales Orders.
@@ -16,7 +20,7 @@ export class SalesOrderQueries {
     limit?: number;
     sortDir?: 'asc' | 'desc';
   }) {
-    const { status, customerId, cursor, limit = 50, sortDir = 'desc' } = query;
+    const { status, customerId, cursor, limit = this.salesConfig.defaultPaginationLimit, sortDir = 'desc' } = query;
 
     const where: any = { shopId };
     

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as levenshtein from 'fast-levenshtein';
 import { Product, ProductVariant } from '@prisma/client';
+import { ValidationFeatureConfig } from '../config/domains/features/validation-feature.config';
 
 export interface DuplicateCheckContext {
   product: Product & { variants: ProductVariant[] };
@@ -11,7 +12,10 @@ export interface DuplicateCheckContext {
 export class DuplicateDetectionEngine {
   private readonly logger = new Logger(DuplicateDetectionEngine.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly validationFeatureConfig: ValidationFeatureConfig
+  ) {}
 
   /**
    * Scans existing products in the shop for highly similar duplicates.
@@ -33,7 +37,7 @@ export class DuplicateDetectionEngine {
         ]
       },
       include: { variants: true },
-      take: 200, // Limit scan to prevent hanging
+      take: this.validationFeatureConfig.duplicateScanLimit, // Limit scan to prevent hanging
     });
 
     for (const candidate of candidates) {

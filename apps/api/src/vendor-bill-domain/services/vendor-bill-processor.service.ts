@@ -5,6 +5,7 @@ import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../storage/storage.service';
 import { DocumentGenerationService } from '../../common/document/document-generation.service';
+import { ProcurementFeatureConfig } from '../../config/domains/features/procurement-feature.config';
 
 @Processor('vendor-bills')
 export class VendorBillProcessorService extends WorkerHost {
@@ -13,7 +14,8 @@ export class VendorBillProcessorService extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
-    private readonly documentService: DocumentGenerationService
+    private readonly documentService: DocumentGenerationService,
+    private readonly procurementConfig: ProcurementFeatureConfig
   ) {
     super();
   }
@@ -33,7 +35,7 @@ export class VendorBillProcessorService extends WorkerHost {
 
   private async handleOCR(data: any) {
     this.logger.log(`Processing scanned invoice via OCR for Vendor Bill ${data.billId}...`);
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, this.procurementConfig.vendorBillProcessorDelayMs));
     return { status: 'OCR_COMPLETED' };
   }
 

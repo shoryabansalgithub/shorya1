@@ -1,7 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger, Injectable } from '@nestjs/common';
-import { WebhookDispatcherService } from '../services/webhook-dispatcher.service';
+import { ProductWebhookDispatcherService } from '../services/webhook-dispatcher.service';
 
 @Processor('webhook-delivery')
 @Injectable()
@@ -9,7 +9,7 @@ export class WebhookDeliveryWorker extends WorkerHost {
   private readonly logger = new Logger(WebhookDeliveryWorker.name);
 
   constructor(
-    private readonly webhookDispatcher: WebhookDispatcherService
+    private readonly webhookDispatcher: ProductWebhookDispatcherService
   ) {
     super();
   }

@@ -23,6 +23,28 @@ export class ReturnValidationEngine {
       throw new BadRequestException('Cannot return items against a voided or cancelled invoice.');
     }
 
+    const invoiceLineIds = returnLines.map(l => l.invoiceLineId);
+    
+    // Check for duplicate returns (already returned quantity) in bulk
+    const existingReturns = await this.prisma.returnLine.findMany({
+      where: {
+        invoiceLineId: { in: invoiceLineIds },
+        shopId,
+        returnOrder: {
+          status: {
+            notIn: ['REJECTED', 'CANCELLED']
+          }
+        }
+      }
+    });
+
+    const returnsByLineId = existingReturns.reduce((acc, rl) => {
+      if (rl.invoiceLineId) {
+        acc[rl.invoiceLineId] = (acc[rl.invoiceLineId] || 0) + rl.quantity;
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
     for (const line of returnLines) {
       const invLine = invoice.lines.find(l => l.id === line.invoiceLineId);
       if (!invLine) {
@@ -33,20 +55,7 @@ export class ReturnValidationEngine {
         throw new BadRequestException(`Return quantity for ${invLine.description} exceeds purchased quantity.`);
       }
 
-      // Check for duplicate returns (already returned quantity)
-      const existingReturns = await this.prisma.returnLine.findMany({
-        where: {
-          invoiceLineId: line.invoiceLineId,
-          shopId,
-          returnOrder: {
-            status: {
-              notIn: ['REJECTED', 'CANCELLED']
-            }
-          }
-        }
-      });
-
-      const totalReturned = existingReturns.reduce((sum, rl) => sum + rl.quantity, 0);
+      const totalReturned = returnsByLineId[line.invoiceLineId] || 0;
       if (totalReturned + line.quantity > invLine.quantity) {
         throw new BadRequestException(`Total returned quantity for ${invLine.description} would exceed purchased quantity.`);
       }

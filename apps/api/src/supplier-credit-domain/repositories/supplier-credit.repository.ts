@@ -9,18 +9,19 @@ import { SupplierCreditApprovalService } from '../services/supplier-credit-appro
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
+import { CacheConfig } from '../../config/domains/cache.config';
 
 @Injectable()
 export class SupplierCreditRepository {
-  constructor(
-    private readonly prisma: PrismaService,
+  constructor(private readonly prisma: PrismaService,
     private readonly lifecycle: SupplierCreditLifecycleService,
     private readonly allocation: SupplierCreditAllocationService,
     private readonly finance: SupplierCreditFinancialService,
     private readonly validation: SupplierCreditValidationService,
     private readonly approval: SupplierCreditApprovalService,
     private readonly eventPublisher: SalesEventPublisher,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig
   ) {}
 
   async createSupplierCredit(shopId: string, payload: any, actorId: string, ipAddress?: string) {
@@ -104,7 +105,7 @@ export class SupplierCreditRepository {
       throw new NotFoundException(`Supplier Credit Note ${id} not found.`);
     }
 
-    await this.cacheManager.set(cacheKey, scn, 60000); 
+    await this.cacheManager.set(cacheKey, scn, this.cacheConfig.supplierCreditTtlMs); 
     return scn;
   }
 

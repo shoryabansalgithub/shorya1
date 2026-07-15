@@ -2,12 +2,15 @@ import { Injectable, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
+import { AnalyticsFeatureConfig } from '../../config/domains/features/analytics-feature.config';
+import { CacheConfig } from '../../config/domains/cache.config';
 
 @Injectable()
 export class AnalyticsTrendService {
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache
+  constructor(private readonly prisma: PrismaService,
+    private readonly analyticsFeatureConfig: AnalyticsFeatureConfig,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly cacheConfig: CacheConfig
   ) {}
 
   async getTrends(shopId: string, periodType: string) {
@@ -18,10 +21,10 @@ export class AnalyticsTrendService {
     const trends = await this.prisma.purchaseTrendSnapshot.findMany({
       where: { shopId, periodType },
       orderBy: { periodStart: 'asc' },
-      take: 12
+      take: this.analyticsFeatureConfig.trendAnalysisLimit
     });
 
-    await this.cacheManager.set(cacheKey, trends, 60000 * 60); // 1 hour cache
+    await this.cacheManager.set(cacheKey, trends, this.cacheConfig.analyticsTrendTtlMs); // 1 hour cache
     return trends;
   }
 
@@ -33,10 +36,10 @@ export class AnalyticsTrendService {
     const spend = await this.prisma.purchaseCategorySpendSnapshot.findMany({
       where: { shopId },
       orderBy: { totalSpend: 'desc' },
-      take: 20
+      take: this.analyticsFeatureConfig.recentOrdersLimit
     });
 
-    await this.cacheManager.set(cacheKey, spend, 60000 * 60);
+    await this.cacheManager.set(cacheKey, spend, this.cacheConfig.analyticsTrendTtlMs);
     return spend;
   }
 }
