@@ -1,0 +1,48 @@
+# ==============================================================================
+# DUKAN AI ENTERPRISE GITATTRIBUTES
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# AUTO-NORMALIZATION (Enforce LF for text files regardless of OS)
+# ------------------------------------------------------------------------------
+* text=auto eol=lf
+
+# ------------------------------------------------------------------------------
+# BINARY FILES (Prevent CRLF conversion and diff generation)
+# ------------------------------------------------------------------------------
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.mov binary
+*.mp4 binary
+*.mp3 binary
+*.wav binary
+*.zip binary
+*.tar.gz binary
+*.tgz binary
+*.rar binary
+*.7z binary
+
+# ------------------------------------------------------------------------------
+# LINGUIST EXCLUSIONS (Exclude from GitHub language statistics)
+# ------------------------------------------------------------------------------
+package-lock.json linguist-generated
+pnpm-lock.yaml linguist-generated
+yarn.lock linguist-generated
+dist/** linguist-generated
+build/** linguist-generated
+out/** linguist-generated
+.next/** linguist-generated
+apps/api/prisma/migrations/** linguist-generated
+
+# ------------------------------------------------------------------------------
+# DIFF STRATEGIES
+# ------------------------------------------------------------------------------
+*.md diff=markdown
+*.json diff=json
+*.html diff=html
+*.css diff=css

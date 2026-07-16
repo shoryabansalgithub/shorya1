@@ -1,47 +1,74 @@
-# Dependencies
+# ==============================================================================
+# DUKAN AI ENTERPRISE GITIGNORE
+# ==============================================================================
+# WARNING: DO NOT MODIFY UNLESS APPROVED BY SECURITY TEAM
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# DEPENDENCIES
+# ------------------------------------------------------------------------------
 node_modules/
 .pnp
 .pnp.js
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
 
-# Testing
-coverage/
-
-# Production
+# ------------------------------------------------------------------------------
+# BUILD ARTIFACTS
+# ------------------------------------------------------------------------------
 build/
 dist/
-.next/
 out/
+.next/
+.cache/
+.turbo/
+.vercel/
+tmp/
+temp/
+*.tsbuildinfo
 
-# Misc
-.DS_Store
-*.pem
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
+# ------------------------------------------------------------------------------
+# TESTING & COVERAGE
+# ------------------------------------------------------------------------------
+coverage/
+.nyc_output/
+cypress/videos/
+cypress/screenshots/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Environment — secret-containing files (NEVER committed)
-# See: docs/architecture/environment-architecture.md
+# ------------------------------------------------------------------------------
+# ENVIRONMENT SECRETS (NEVER COMMITTED)
+# ------------------------------------------------------------------------------
 .env
 .env.local
 .env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
 apps/api/.env*
 apps/web/.env*
 
-# Secrets and Certificates (NEVER committed)
+# ------------------------------------------------------------------------------
+# ENVIRONMENT TEMPLATES (ALWAYS COMMITTED)
+# ------------------------------------------------------------------------------
+!*.env.example
+!*.env.development
+!*.env.test
+!*.env.production
+
+# ------------------------------------------------------------------------------
+# SECRETS, CERTIFICATES & KEYS (NEVER COMMITTED)
+# ------------------------------------------------------------------------------
 *.pem
 *.key
 *.crt
+*.cer
+*.csr
 *.p12
 *.pfx
+id_rsa*
+id_ed25519*
 secret*
 secrets*
 credentials.json
@@ -50,12 +77,40 @@ firebase-adminsdk*.json
 aws-credentials
 gcp-credentials
 azure-credentials
+.terraform/
+*.tfstate
+*.tfstate.backup
 
-# Environment — onboarding templates (ALWAYS committed)
-!*.env.example
-!*.env.development
-!*.env.test
-!*.env.production
+# ------------------------------------------------------------------------------
+# LOGS & DATABASES
+# ------------------------------------------------------------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.sqlite
+*.sqlite3
+*.db
+*.bak
+*.backup
 
-# OS
+# ------------------------------------------------------------------------------
+# OS & IDE FILES
+# ------------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
