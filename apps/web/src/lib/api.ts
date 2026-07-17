@@ -62,13 +62,18 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-// ---- Response interceptor — auto-signout on 401 ----
+// ---- Response interceptor — expire authenticated sessions on 401 only. ----
+// Guests may browse the public shell without a session; redirecting them on a
+// protected API response would make the guest experience unusable.
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401 && typeof window !== 'undefined') {
-      const { signOut } = await import('next-auth/react');
-      await signOut({ callbackUrl: '/login' });
+      const { getSession, signOut } = await import('next-auth/react');
+      const session = await getSession();
+      if (session?.accessToken) {
+        await signOut({ callbackUrl: '/login' });
+      }
     }
     return Promise.reject(error);
   },

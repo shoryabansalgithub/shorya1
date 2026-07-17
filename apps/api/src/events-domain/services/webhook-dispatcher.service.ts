@@ -1,39 +1,61 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 import * as crypto from 'crypto';
 
 @Injectable()
 export class WebhookDispatcherService {
   private readonly logger = new Logger(WebhookDispatcherService.name);
 
-  /**
-   * Signs and dispatches webhooks with HMAC SHA256.
-   * In a full implementation, this would look up WebhookEndpoints from the DB based on shopId and event type.
-   */
-  async dispatch(shopId: string, eventType: string, payload: any): Promise<boolean> {
+  constructor(private readonly prisma: PrismaService) {}
+
+  /** Sends the event to each active subscription that requested its type. */
+  async dispatch(shopId: string, eventType: string, payload: unknown, eventId: string): Promise<void> {
+    const endpoints = await this.prisma.webhookEndpoint.findMany({
+      where: { shopId, isActive: true },
+    });
+
+    const subscribed = endpoints.filter((endpoint) =>
+      Array.isArray(endpoint.events) && endpoint.events.some((event) => event === eventType || event === '*'),
+    );
+
+    await Promise.all(subscribed.map((endpoint) => this.deliver(endpoint, eventType, payload, eventId)));
+  }
+
+  private async deliver(
+    endpoint: { id: string; url: string; secret: string },
+    eventType: string,
+    payload: unknown,
+    eventId: string,
+  ): Promise<void> {
+    const timestamp = new Date().toISOString();
+    const body = JSON.stringify({ eventId, eventType, timestamp, payload });
+    const signature = crypto.createHmac('sha256', endpoint.secret).update(`${timestamp}.${body}`).digest('hex');
+    const startedAt = Date.now();
+
     try {
-      // 1. Simulate lookup of Webhook Subscription for this tenant
-      // const subscriptions = await this.prisma.webhookEndpoint.findMany({ where: { shopId, isActive: true } });
-      const mockSecret = 'DUMMY_TENANT_SECRET';
-      const mockEndpoint = 'https://webhook.site/dummy-endpoint'; // Dummy
+      const response = await fetch(endpoint.url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-dukanai-event': eventType,
+          'x-dukanai-signature': signature,
+          'x-dukanai-timestamp': timestamp,
+        },
+        body,
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) throw new Error(`Webhook responded with HTTP ${response.status}`);
 
-      // 2. Compute HMAC Signature
-      const timestamp = Date.now().toString();
-      const stringifiedPayload = JSON.stringify(payload);
-      
-      const signature = crypto
-        .createHmac('sha256', mockSecret)
-        .update(`${timestamp}.${stringifiedPayload}`)
-        .digest('hex');
-
-      // 3. Dispatch (Simulated using Logger for safety without external HTTP calls)
-      this.logger.log(`[Webhook Dispatch] -> ${mockEndpoint}`);
-      this.logger.log(`Event: ${eventType} | Signature: ${signature} | TS: ${timestamp}`);
-      
-      // Simulating a successful HTTP 200 return
-      return true;
-    } catch (error: any) {
-      this.logger.error(`Webhook dispatch failed for ${eventType}: ${error.message}`);
-      return false;
+      await this.prisma.webhookDelivery.create({
+        data: { endpointId: endpoint.id, eventId, eventType, payload: payload as any, status: 'SUCCESS', statusCode: response.status, latencyMs: Date.now() - startedAt },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown webhook delivery error';
+      await this.prisma.webhookDelivery.create({
+        data: { endpointId: endpoint.id, eventId, eventType, payload: payload as any, status: 'FAILED', errorMessage: message, latencyMs: Date.now() - startedAt },
+      });
+      this.logger.error(`Webhook delivery failed for endpoint ${endpoint.id}: ${message}`);
+      throw error;
     }
   }
 }

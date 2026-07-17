@@ -25,7 +25,7 @@ To securely operate `v1.0.0-rc1`, the hosting infrastructure must fulfill the fo
 | `DATABASE_URL` | **YES** | MySQL connection string. Must target a database schema user with Trigger permissions. |
 | `PORT` | NO | Express server binding. Defaults to `3001`. |
 | `FRONTEND_URL` | **YES** | Comma-separated list of CORS-approved domains. |
-| `REDIS_URL` | **YES** | BullMQ connection string. If omitted, background tasks fail-open gracefully to local memory. |
+| `REDIS_URL` | **YES in production** | BullMQ connection string. Production startup rejects a missing or malformed value; development may run without Redis for local API work, but queued work is unavailable. |
 | `NODE_ENV` | NO | Use `production` to disable Swagger and optimize performance mappings. |
 | `JWT_SECRET` | **YES** | Signature key for Bearer tokens. |
 | `JWT_EXPIRES_IN` | **YES** | Default access-token validity. |

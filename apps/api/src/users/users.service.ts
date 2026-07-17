@@ -60,7 +60,6 @@ export class UsersService {
           data: {
             id: shopId,
             name: data.shopName,
-            ownerId: userId,
           },
         });
 
@@ -74,6 +73,14 @@ export class UsersService {
             shopId: shopId,
           },
           select: safeUserSelect,
+        });
+
+        // A Shop and its owner reference each other. The shop is created
+        // owner-less within this transaction, then linked once the user
+        // exists. This preserves referential integrity without disabling FKs.
+        await tx.shop.update({
+          where: { id: shopId },
+          data: { ownerId: userId },
         });
 
         return createdUser;
@@ -142,11 +149,10 @@ export class UsersService {
           data: {
             id: shopId,
             name: `${name}'s Shop`,
-            ownerId: userId,
           },
         });
 
-        return tx.user.create({
+        const createdUser = await tx.user.create({
           data: {
             id: userId,
             email,
@@ -158,6 +164,13 @@ export class UsersService {
           },
           select: safeUserSelect,
         });
+
+        await tx.shop.update({
+          where: { id: shopId },
+          data: { ownerId: userId },
+        });
+
+        return createdUser;
       });
 
       this.logger.log(`Created new Google OAuth user ${userId}`);

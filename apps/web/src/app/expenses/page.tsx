@@ -11,15 +11,6 @@ import { useToast } from '@/components/ui/Toast';
 import { AnimatePresence, motion } from 'framer-motion';
 import { expensesApi } from '@/lib/api-client';
 
-// Mock Expenses Data
-const MOCK_EXPENSES = [
-  { id: 'EXP-001', date: '2026-05-20', category: 'Rent', description: 'Shop Rent - May', amount: 15000, mode: 'Bank Transfer', status: 'Paid', icon: Building },
-  { id: 'EXP-002', date: '2026-05-18', category: 'Utilities', description: 'Electricity Bill', amount: 3200, mode: 'UPI', status: 'Paid', icon: Zap },
-  { id: 'EXP-003', date: '2026-05-15', category: 'Supplies', description: 'Cleaning Materials', amount: 850, mode: 'Cash', status: 'Paid', icon: Receipt },
-  { id: 'EXP-004', date: '2026-05-10', category: 'Maintenance', description: 'AC Repair', amount: 2500, mode: 'Cash', status: 'Paid', icon: TrendingDown },
-  { id: 'EXP-005', date: '2026-05-22', category: 'Utilities', description: 'Internet Bill', amount: 1200, mode: 'Unpaid', status: 'Pending', icon: Zap },
-];
-
 const CATEGORY_COLORS: Record<string, string> = {
   'Rent': 'bg-blue-100 text-blue-600',
   'Utilities': 'bg-yellow-100 text-yellow-600',
@@ -31,13 +22,17 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 export default function ExpensesPage() {
   const { toast } = useToast();
-  const [expenses, setExpenses] = useState(MOCK_EXPENSES as Array<{ id: string; category: string; amount: number; description: string; status: string; date: string; mode: string; icon: any }>);
+  const [expenses, setExpenses] = useState<Array<{ id: string; category: string; amount: number; description: string; status: string; date: string; mode: string; icon?: any }>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     expensesApi.list()
-      .then(data => { if (Array.isArray(data) && data.length > 0) setExpenses(data as typeof MOCK_EXPENSES); })
-      .catch(() => { /* keep mock data */ })
+      .then(data => {
+        if (Array.isArray(data)) {
+          setExpenses(data as Array<{ id: string; category: string; amount: number; description: string; status: string; date: string; mode: string; icon?: any }>);
+        }
+      })
+      .catch(() => { setExpenses([]); toast('Unable to load expenses.', 'error'); })
       .finally(() => setLoading(false));
   }, []);
   const [searchTerm, setSearchTerm] = useState('');

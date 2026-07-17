@@ -13,14 +13,6 @@ import { useToast } from '@/components/ui/Toast';
 import { AnimatePresence, motion } from 'framer-motion';
 import { employeesApi } from '@/lib/api-client';
 
-// Mock Employees Data
-const MOCK_EMPLOYEES = [
-  { id: 'EMP-01', name: 'Raju Bhai', role: 'Cashier', phone: '9876543210', shift: 'Morning', salary: 15000, advance: 2000, status: 'On Shift' },
-  { id: 'EMP-02', name: 'Suresh Kumar', role: 'Manager', phone: '9123456780', shift: 'Full Day', salary: 25000, advance: 0, status: 'On Shift' },
-  { id: 'EMP-03', name: 'Amit Verma', role: 'Stock Clerk', phone: '9988776655', shift: 'Evening', salary: 12000, advance: 500, status: 'Off Shift' },
-  { id: 'EMP-04', name: 'Karan Singh', role: 'Delivery Boy', phone: '8877665544', shift: 'Morning', salary: 14000, advance: 0, status: 'On Leave' },
-];
-
 const ROLE_COLORS: Record<string, string> = {
   'Cashier': 'bg-blue-100 text-blue-600',
   'Manager': 'bg-purple-100 text-purple-600',
@@ -41,8 +33,8 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     employeesApi.list()
-      .then(data => { setEmployees(data.length ? data : MOCK_EMPLOYEES); })
-      .catch(() => { setEmployees(MOCK_EMPLOYEES); })
+      .then(setEmployees)
+      .catch(() => { setEmployees([]); toast('Unable to load employees.', 'error'); })
       .finally(() => setLoading(false));
   }, []);
   const [searchTerm, setSearchTerm] = useState('');

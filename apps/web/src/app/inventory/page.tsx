@@ -10,26 +10,30 @@ import { Modal } from '@/components/ui/Modal';
 import { SlidingPanel } from '@/components/ui/SlidingPanel';
 import { useToast } from '@/components/ui/Toast';
 import { AnimatePresence, motion } from 'framer-motion';
-import { inventoryApi } from '@/lib/api-client';
-// Mock Inventory Batch Data
-const MOCK_BATCHES = [
-  { id: 'B101', product: 'Maggi Masala Noodles', sku: 'MGG001', batchNo: 'BAT-2601A', mfgDate: '2026-01-10', expDate: '2026-07-10', quantity: 150, supplier: 'Delhi Wholesale Mart' },
-  { id: 'B102', product: 'Aashirvaad Atta 5kg', sku: 'ASH001', batchNo: 'BAT-2512C', mfgDate: '2025-12-15', expDate: '2026-05-25', quantity: 8, supplier: 'Balaji Distributors' },
-  { id: 'B103', product: 'Coca Cola 1L', sku: 'COK001', batchNo: 'BAT-2602B', mfgDate: '2026-02-01', expDate: '2026-08-01', quantity: 45, supplier: 'Balaji Distributors' },
-  { id: 'B104', product: 'Parle-G Biscuit', sku: 'PRL001', batchNo: 'BAT-2509X', mfgDate: '2025-09-20', expDate: '2026-03-20', quantity: 0, supplier: 'ITC Logistics' },
-  { id: 'B105', product: 'Amul Butter 500g', sku: 'AML002', batchNo: 'BAT-2604D', mfgDate: '2026-04-10', expDate: '2026-05-22', quantity: 12, supplier: 'Local Veg Supply' },
-];
+import { inventoryApi, type BatchItem } from '@/lib/api-client';
+
+function formatBatchDate(date: string | null, options: Intl.DateTimeFormatOptions) {
+  return date ? new Date(date).toLocaleDateString('en-IN', options) : 'Not recorded';
+}
 
 export default function InventoryPage() {
   const { toast } = useToast();
-  const [batches, setBatches] = useState<any[]>([]);
+  const [batches, setBatches] = useState<BatchItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    inventoryApi.listBatches()
-      .then(data => { setBatches(data.length ? data : MOCK_BATCHES); })
-      .catch(() => { setBatches(MOCK_BATCHES); })
-      .finally(() => setLoading(false));
+    const loadBatches = async () => {
+      try {
+        setLoadError(null);
+        setBatches(await inventoryApi.listBatches());
+      } catch {
+        setLoadError('Unable to load inventory batches. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    void loadBatches();
   }, []);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -61,16 +65,17 @@ export default function InventoryPage() {
   const [adjustReason, setAdjustReason] = useState('');
 
   // Derived Stats
-  const today = new Date('2026-05-21'); // Mock today's date based on app state
+  const today = new Date();
   const thirtyDaysFromNow = new Date(today);
   thirtyDaysFromNow.setDate(today.getDate() + 30);
 
   const expiringSoonCount = batches.filter(b => {
+    if (!b.expDate) return false;
     const exp = new Date(b.expDate);
     return exp > today && exp <= thirtyDaysFromNow && b.quantity > 0;
   }).length;
 
-  const expiredCount = batches.filter(b => new Date(b.expDate) <= today && b.quantity > 0).length;
+  const expiredCount = batches.filter(b => b.expDate && new Date(b.expDate) <= today && b.quantity > 0).length;
   const zeroStockBatches = batches.filter(b => b.quantity === 0).length;
 
   // Filter Logic
@@ -84,21 +89,9 @@ export default function InventoryPage() {
     e.preventDefault();
     if (!adjustQty || Number(adjustQty) <= 0) return;
 
-    if (selectedBatch) {
-      setBatches(batches.map(b => {
-        if (b.id === selectedBatch.id) {
-          const newQty = adjustType === 'Addition' 
-            ? b.quantity + Number(adjustQty)
-            : Math.max(0, b.quantity - Number(adjustQty));
-          return { ...b, quantity: newQty };
-        }
-        return b;
-      }));
-      toast(`${adjustType} of ${adjustQty} units recorded for ${selectedBatch.product}`, 'success');
-    } else {
-      toast('Stock adjustment recorded successfully', 'success');
-    }
-    
+    // Persisting an adjustment requires the physical inventory location and a
+    // ledger entry. Do not mutate client state and falsely report success.
+    toast('Choose a product inventory location before recording an adjustment.', 'info');
     setIsAdjustModalOpen(false);
     setAdjustQty(''); setAdjustReason('');
     setSelectedBatch(null);
@@ -122,6 +115,7 @@ export default function InventoryPage() {
     }
   };
   if (loading) return <div className="p-12 text-center text-gray-500">Loading inventory batches...</div>;
+  if (loadError) return <div className="p-12 text-center text-red-600">{loadError}</div>;
 
   return (
     <div className="space-y-6">
@@ -184,7 +178,7 @@ export default function InventoryPage() {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Monthly Wastage</p>
-            <h3 className="text-xl font-bold text-gray-800 tracking-tight">₹4,250</h3>
+            <h3 className="text-xl font-bold text-gray-800 tracking-tight">₹0</h3>
           </div>
         </Card>
       </div>
@@ -265,9 +259,9 @@ export default function InventoryPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {processedBatches.map((batch) => {
-                  const expDate = new Date(batch.expDate);
-                  const isExpired = expDate <= today && batch.quantity > 0;
-                  const isExpiringSoon = !isExpired && expDate <= thirtyDaysFromNow && batch.quantity > 0;
+                  const expDate = batch.expDate ? new Date(batch.expDate) : null;
+                  const isExpired = Boolean(expDate && expDate <= today && batch.quantity > 0);
+                  const isExpiringSoon = Boolean(!isExpired && expDate && expDate <= thirtyDaysFromNow && batch.quantity > 0);
                   const isEmpty = batch.quantity === 0;
 
                   let statusText = 'Safe';
@@ -297,10 +291,10 @@ export default function InventoryPage() {
                           <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100">{batch.batchNo}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 font-medium">{new Date(batch.mfgDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</td>
+                      <td className="px-6 py-4 font-medium">{formatBatchDate(batch.mfgDate, { month: 'short', year: 'numeric' })}</td>
                       <td className="px-6 py-4">
                         <span className={`font-bold ${isExpired ? 'text-red-600' : isExpiringSoon ? 'text-orange-600' : 'text-gray-800'}`}>
-                          {new Date(batch.expDate).toLocaleDateString('en-IN')}
+                          {formatBatchDate(batch.expDate, {})}
                         </span>
                       </td>
                       <td className="px-6 py-4 font-black text-gray-800 text-base">{batch.quantity}</td>
@@ -341,6 +335,13 @@ export default function InventoryPage() {
                     </tr>
                   );
                 })}
+                {processedBatches.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-16 text-center text-sm text-gray-500">
+                      No inventory batches yet. Add stock to a product to begin tracking batch and expiry data.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -443,9 +444,9 @@ export default function InventoryPage() {
               <div className="relative pl-6">
                 <div className="absolute w-3 h-3 bg-[#8B5CF6] rounded-full -left-[7px] top-1.5 shadow-[0_0_10px_rgba(139,92,246,0.5)]" />
                 <p className="text-sm font-bold text-gray-800">Inwarded at Store</p>
-                <p className="text-xs text-gray-500 mt-1">From: {selectedBatch.supplier}</p>
+                <p className="text-xs text-gray-500 mt-1">Supplier lot: {selectedBatch.supplierLotNumber ?? 'Not recorded'}</p>
                 <div className="mt-2 inline-flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-bold text-gray-700">
-                  <span className="text-green-500">+150 units</span> received
+                  <span className="text-green-500">{selectedBatch.quantity} units</span> recorded
                 </div>
               </div>
 

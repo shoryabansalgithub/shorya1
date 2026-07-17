@@ -10,48 +10,13 @@ import { Card } from '@/components/ui/Card';
 import { useRouter } from 'next/navigation';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
-import { productsApi } from '@/lib/api-client';
+import { customersApi, productsApi } from '@/lib/api-client';
+import apiClient from '@/lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Dummy static charts for UI purposes to perfectly match the screenshot without complex chart setups
-const DummyLineChart = () => (
-  <div className="w-full h-[180px] mt-4 relative">
-    {/* Background Grid */}
-    <div className="absolute inset-0 flex flex-col justify-between">
-      {[40, 30, 20, 10, 0].map(k => (
-        <div key={k} className="flex items-center gap-2 text-[10px] text-gray-400 w-full border-b border-dashed border-gray-100 pb-1">
-          <span>₹{k}k</span>
-        </div>
-      ))}
-    </div>
-    {/* Simulated SVG Line */}
-    <div className="absolute inset-0 pt-6 ml-6">
-      <svg viewBox="0 0 400 150" className="w-full h-full preserve-3d" preserveAspectRatio="none">
-        <path d="M0,100 C50,110 100,50 150,80 C200,110 250,20 300,50 C350,80 400,20 400,20" fill="none" stroke="#8B5CF6" strokeWidth="3" />
-        <path d="M0,100 C50,110 100,50 150,80 C200,110 250,20 300,50 C350,80 400,20 400,20 L400,150 L0,150 Z" fill="url(#gradient)" opacity="0.2" />
-        <defs>
-          <linearGradient id="gradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#8B5CF6" />
-            <stop offset="100%" stopColor="transparent" />
-          </linearGradient>
-        </defs>
-        {/* Points */}
-        {[
-          {x: 0, y: 100}, {x: 150, y: 80}, {x: 300, y: 50}, {x: 400, y: 20}
-        ].map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="4" fill="#8B5CF6" stroke="white" strokeWidth="2" />
-        ))}
-      </svg>
-    </div>
-    <div className="absolute bottom-0 left-8 right-0 flex justify-between text-[10px] text-gray-400 font-medium pt-2">
-      <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
-    </div>
-    
-    {/* Tooltip */}
-    <div className="absolute top-[30px] left-[60%] -translate-x-1/2 bg-white shadow-[0_4px_15px_rgba(0,0,0,0.1)] rounded-lg py-1 px-3 border border-gray-100 z-10 text-center">
-      <div className="text-[10px] text-gray-500">Friday, 17 May</div>
-      <div className="text-sm font-bold text-gray-800">₹28,450</div>
-    </div>
+const NoTrendData = () => (
+  <div className="mt-4 flex h-[180px] items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 px-6 text-center text-sm text-gray-500">
+    Sales trend data will appear once completed invoices are aggregated for the selected period.
   </div>
 );
 
@@ -60,7 +25,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
   
-  const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
   
   const [productSearch, setProductSearch] = useState('magi');
@@ -75,6 +39,7 @@ export default function DashboardPage() {
   const [products, setProducts] = useState<Awaited<ReturnType<typeof productsApi.list>>>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<{ totalRevenue: number; totalOrders: number; totalCustomers: number; totalProducts: number; lowStockCount: number; recentInvoices: Array<{ id: string; invoiceNumber: string; totalAmount: number; paymentMode: string; createdAt: string; customer: { name: string } | null }>; paymentModes: Array<{ mode: string; amount: number }> } | null>(null);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -85,6 +50,7 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchProducts();
     fetchCustomers();
+    void apiClient.get('/dashboard/summary').then(({ data }) => setSummary(data)).catch(() => setSummary(null));
   }, []);
   
   const fetchProducts = async () => {
@@ -103,19 +69,7 @@ export default function DashboardPage() {
 
   const fetchCustomers = async () => {
     try {
-      const res = await fetch('http://localhost:3002/api/customers');
-      if (res.ok) {
-        const data = await res.json();
-        const mappedData = data.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          phone: c.phone,
-          email: c.email || '',
-          address: c.address || '',
-          udharAmount: Number(c.outstandingBalance) || 0,
-        }));
-        setCustomers(mappedData);
-      }
+      setCustomers(await customersApi.list());
     } catch (err) {
       console.error("Error fetching customers", err);
     }
@@ -137,7 +91,7 @@ export default function DashboardPage() {
   const handleQuickAction = (action: string) => {
     switch (action) {
       case 'Create Bill': router.push('/billing'); break;
-      case 'Add Product': setIsAddProductModalOpen(true); break;
+      case 'Add Product': router.push('/products'); break;
       case 'Add Customer': setIsAddCustomerModalOpen(true); break;
       case 'Customer Udhar': router.push('/customers'); break;
       case 'Low Stock': router.push('/inventory?tab=low-stock'); break;
@@ -153,23 +107,12 @@ export default function DashboardPage() {
     if (!newName.trim() || !newPhone.trim()) return;
     
     try {
-      const response = await fetch('http://localhost:3002/api/customers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newName,
-          phone: newPhone,
-          email: newEmail,
-          address: newAddress,
-          udharAmount: Number(newUdhar) || 0,
-          creditLimit: Number(newCreditLimit) || 5000,
-          shopId: 'default-shop-id'
-        })
+      await customersApi.create({
+        name: newName,
+        phone: newPhone,
+        email: newEmail || undefined,
+        address: newAddress || undefined,
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to create customer');
-      }
 
       toast('Customer added successfully', 'success');
       setIsAddCustomerModalOpen(false);
@@ -222,10 +165,8 @@ export default function DashboardPage() {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Total Sales</p>
-            <h3 className="text-xl font-bold text-gray-800 tracking-tight">₹1,28,450</h3>
-            <p className="text-[10px] text-green-600 font-bold mt-0.5 flex items-center gap-1">
-              <span>▲ 18.4%</span> <span className="text-gray-400 font-medium">vs yesterday</span>
-            </p>
+            <h3 className="text-xl font-bold text-gray-800 tracking-tight">₹{(summary?.totalRevenue ?? 0).toLocaleString('en-IN')}</h3>
+            <p className="text-[10px] text-gray-500 font-medium mt-0.5">Completed invoices</p>
           </div>
         </Card>
 
@@ -236,10 +177,8 @@ export default function DashboardPage() {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Total Profit</p>
-            <h3 className="text-xl font-bold text-gray-800 tracking-tight">₹32,780</h3>
-            <p className="text-[10px] text-green-600 font-bold mt-0.5 flex items-center gap-1">
-              <span>▲ 15.6%</span> <span className="text-gray-400 font-medium">vs yesterday</span>
-            </p>
+            <h3 className="text-xl font-bold text-gray-800 tracking-tight">—</h3>
+            <p className="text-[10px] text-gray-500 font-medium mt-0.5">Profit reporting is not configured</p>
           </div>
         </Card>
 
@@ -250,10 +189,8 @@ export default function DashboardPage() {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Total Udhar (Pending)</p>
-            <h3 className="text-xl font-bold text-gray-800 tracking-tight">₹54,320</h3>
-            <p className="text-[10px] text-red-500 font-bold mt-0.5 flex items-center gap-1">
-              <span>▼ 12.3%</span> <span className="text-gray-400 font-medium">from last month</span>
-            </p>
+            <h3 className="text-xl font-bold text-gray-800 tracking-tight">₹{customers.reduce((total, customer) => total + customer.udharAmount, 0).toLocaleString('en-IN')}</h3>
+            <p className="text-[10px] text-gray-500 font-medium mt-0.5">Current customer balances</p>
           </div>
         </Card>
 
@@ -264,8 +201,8 @@ export default function DashboardPage() {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Low Stock Items</p>
-            <h3 className="text-xl font-bold text-gray-800 tracking-tight">12</h3>
-            <p className="text-[10px] text-gray-500 font-medium mt-0.5">Needs attention</p>
+            <h3 className="text-xl font-bold text-gray-800 tracking-tight">{summary?.lowStockCount ?? 0}</h3>
+            <p className="text-[10px] text-gray-500 font-medium mt-0.5">From current inventory</p>
           </div>
         </Card>
 
@@ -276,10 +213,8 @@ export default function DashboardPage() {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Today's Orders</p>
-            <h3 className="text-xl font-bold text-gray-800 tracking-tight">86</h3>
-            <p className="text-[10px] text-green-600 font-bold mt-0.5 flex items-center gap-1">
-              <span>▲ 21.2%</span> <span className="text-gray-400 font-medium">vs yesterday</span>
-            </p>
+            <h3 className="text-xl font-bold text-gray-800 tracking-tight">{summary?.totalOrders ?? 0}</h3>
+            <p className="text-[10px] text-gray-500 font-medium mt-0.5">Completed invoices</p>
           </div>
         </Card>
       </div>
@@ -325,7 +260,7 @@ export default function DashboardPage() {
               </AnimatePresence>
             </div>
           </div>
-          <DummyLineChart />
+          <NoTrendData />
         </Card>
 
         {/* Quick Actions */}
@@ -455,21 +390,18 @@ export default function DashboardPage() {
           </AnimatePresence>
 
           <div className="space-y-3 mt-4">
-            {[
-              { name: 'Maggi 2-Minute (70g)', price: '₹14' },
-              { name: 'Maggi Masala Noodles (Pack of 12)', price: '₹168' },
-              { name: 'Maggi Hot & Sweet', price: '₹16' }
-            ].map((p, i) => (
-              <div key={i} className="flex items-center justify-between text-xs">
+            {filteredProducts.slice(0, 3).map((product) => (
+              <button key={product.id} onClick={() => router.push(`/billing?product=${product.id}`)} className="flex w-full items-center justify-between text-left text-xs">
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-yellow-100 rounded-sm flex items-center justify-center text-[10px]">🍜</div>
-                  <span className="font-semibold text-gray-700">{p.name}</span>
+                  <div className="w-5 h-5 bg-purple-100 text-purple-600 rounded-sm flex items-center justify-center text-[10px]">P</div>
+                  <span className="font-semibold text-gray-700">{product.name}</span>
                 </div>
-                <span className="font-bold text-gray-800">{p.price}</span>
-              </div>
+                <span className="font-bold text-gray-800">₹{product.price}</span>
+              </button>
             ))}
-            <button className="w-full mt-2 pt-3 border-t border-gray-100 text-[#8B5CF6] text-xs font-bold flex items-center gap-1 hover:text-[#7C3AED] transition-colors">
-              <Sparkles size={14} /> Create New Product "{productSearch || "magi"}"
+            {filteredProducts.length === 0 && <p className="py-2 text-center text-xs text-gray-500">No matching products.</p>}
+            <button onClick={() => router.push('/products')} className="w-full mt-2 pt-3 border-t border-gray-100 text-[#8B5CF6] text-xs font-bold flex items-center gap-1 hover:text-[#7C3AED] transition-colors">
+              <Plus size={14} /> Add product
             </button>
           </div>
         </Card>
@@ -478,26 +410,23 @@ export default function DashboardPage() {
         <Card className="lg:col-span-3 p-5 relative">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-bold text-gray-800 text-[15px]">Low Stock Alerts</h3>
-            <span className="text-xs text-[#8B5CF6] font-semibold cursor-pointer">View All</span>
+            <span onClick={() => router.push('/products')} className="text-xs text-[#8B5CF6] font-semibold cursor-pointer">View All</span>
           </div>
           <div className="space-y-4">
-            {[
-              { name: 'Parle-G Biscuit', stock: 5, status: 'Critical', bg: 'bg-red-50', text: 'text-red-600', icon: '🍪' },
-              { name: 'Surf Excel 1kg', stock: 8, status: 'Critical', bg: 'bg-red-50', text: 'text-red-600', icon: '🧼' },
-              { name: 'Aashirvaad Atta 5kg', stock: 10, status: 'Low', bg: 'bg-amber-50', text: 'text-amber-600', icon: '🌾' },
-              { name: 'Coca Cola 1L', stock: 12, status: 'Low', bg: 'bg-amber-50', text: 'text-amber-600', icon: '🥤' }
-            ].map((item, i) => (
-              <div key={i} className="flex items-center justify-between">
+            {products.filter((product) => product.quantity <= 10).slice(0, 4).map((product) => {
+              const critical = product.quantity <= 5;
+              return <div key={product.id} className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">{item.icon}</div>
+                  <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500"><Package size={15} /></div>
                   <div>
-                    <p className="text-xs font-bold text-gray-800">{item.name}</p>
-                    <p className="text-[10px] text-gray-500">Stock: {item.stock} pcs</p>
+                    <p className="text-xs font-bold text-gray-800">{product.name}</p>
+                    <p className="text-[10px] text-gray-500">Stock: {product.quantity} pcs</p>
                   </div>
                 </div>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.bg} ${item.text}`}>{item.status}</span>
-              </div>
-            ))}
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${critical ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>{critical ? 'Critical' : 'Low'}</span>
+              </div>;
+            })}
+            {products.filter((product) => product.quantity <= 10).length === 0 && <p className="py-2 text-center text-xs text-gray-500">No low-stock products.</p>}
           </div>
         </Card>
 
@@ -509,27 +438,11 @@ export default function DashboardPage() {
           <div className="space-y-3 relative z-10">
             <div className="flex gap-2 items-start bg-white/60 p-2 rounded-lg text-[11px] font-medium text-gray-700 backdrop-blur-sm border border-white">
               <Sparkles size={14} className="text-[#8B5CF6] mt-0.5 flex-shrink-0" />
-              <span>Maggi sales increased 32% this week! 📈</span>
+              <span>No AI insights have been generated for this shop yet.</span>
             </div>
-            <div className="flex gap-2 items-start bg-white/60 p-2 rounded-lg text-[11px] font-medium text-gray-700 backdrop-blur-sm border border-white">
-              <AlertCircle size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />
-              <span>Ramesh Kumar's udhar is ₹12,450 (Overdue 5 days)</span>
-            </div>
-            <div className="flex gap-2 items-start bg-white/60 p-2 rounded-lg text-[11px] font-medium text-gray-700 backdrop-blur-sm border border-white">
-              <ShoppingBag size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />
-              <span>Restock Parle-G & Surf Excel soon</span>
-            </div>
-            <div className="flex gap-2 items-start bg-white/60 p-2 rounded-lg text-[11px] font-medium text-gray-700 backdrop-blur-sm border border-white">
-              <TrendingUp size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />
-              <span>Peak sales time: 6PM - 9PM daily</span>
-            </div>
-            <button className="bg-[#8B5CF6] text-white text-[11px] font-bold px-4 py-2 rounded-lg mt-2 flex items-center gap-1 shadow-lg shadow-[#8B5CF6]/30">
+            <button onClick={() => router.push('/ai-assistant')} className="bg-[#8B5CF6] text-white text-[11px] font-bold px-4 py-2 rounded-lg mt-2 flex items-center gap-1 shadow-lg shadow-[#8B5CF6]/30">
               Ask AI Assistant &rarr;
             </button>
-          </div>
-          {/* Decorative AI Robot Placeholder */}
-          <div className="absolute -bottom-4 -right-4 w-32 h-32 opacity-80 pointer-events-none drop-shadow-2xl text-8xl flex items-center justify-center">
-            🤖
           </div>
         </Card>
 
@@ -540,23 +453,19 @@ export default function DashboardPage() {
             <span className="text-xs text-[#8B5CF6] font-semibold cursor-pointer">View All</span>
           </div>
           <div className="space-y-4">
-            {[
-              { name: 'Ramesh Kumar (Udhar)', inv: 'INV-1025', amount: '₹1,250', color: 'text-red-500', icon: 'bg-orange-100 text-orange-500' },
-              { name: 'Walk-in Customer (Cash)', inv: 'INV-1024', amount: '₹780', color: 'text-green-500', icon: 'bg-green-100 text-green-500' },
-              { name: 'Suresh Yadav (Udhar)', inv: 'INV-1023', amount: '₹2,150', color: 'text-red-500', icon: 'bg-orange-100 text-orange-500' },
-              { name: 'Neha Singh (UPI)', inv: 'INV-1022', amount: '₹980', color: 'text-green-500', icon: 'bg-blue-100 text-blue-500' }
-            ].map((t, i) => (
-              <div key={i} className="flex items-center justify-between">
+            {(summary?.recentInvoices ?? []).map((invoice) => (
+              <div key={invoice.id} className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${t.icon}`}><Receipt size={14} /></div>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-100 text-blue-500"><Receipt size={14} /></div>
                   <div>
-                    <p className="text-[11px] font-bold text-gray-800">{t.name}</p>
-                    <p className="text-[10px] text-gray-400">#{t.inv}</p>
+                    <p className="text-[11px] font-bold text-gray-800">{invoice.customer?.name ?? 'Walk-in customer'} ({invoice.paymentMode})</p>
+                    <p className="text-[10px] text-gray-400">#{invoice.invoiceNumber}</p>
                   </div>
                 </div>
-                <span className={`text-xs font-bold ${t.color}`}>{t.amount}</span>
+                <span className="text-xs font-bold text-green-500">₹{invoice.totalAmount.toLocaleString('en-IN')}</span>
               </div>
             ))}
+            {summary && summary.recentInvoices.length === 0 && <p className="text-xs text-gray-500">No transactions yet.</p>}
             <button className="w-full text-center mt-2 pt-3 border-t border-gray-100 text-[#8B5CF6] text-[11px] font-bold flex items-center justify-center gap-1">
               See All Transactions &rarr;
             </button>
@@ -568,94 +477,34 @@ export default function DashboardPage() {
       {/* Bottom Row Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Category Sales */}
-        <Card className="p-5 flex items-center gap-6">
-          <div className="flex-1">
-            <h3 className="font-bold text-gray-800 text-[15px] mb-4">Category Sales</h3>
-            <div className="w-32 h-32 mx-auto">
-              {/* Complex SVG Donut representation */}
-              <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#E5E7EB" strokeWidth="4" />
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#3B82F6" strokeWidth="4" strokeDasharray="42 100" />
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#F59E0B" strokeWidth="4" strokeDasharray="21 100" strokeDashoffset="-42" />
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#10B981" strokeWidth="4" strokeDasharray="17 100" strokeDashoffset="-63" />
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#8B5CF6" strokeWidth="4" strokeDasharray="12 100" strokeDashoffset="-80" />
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#F43F5E" strokeWidth="4" strokeDasharray="8 100" strokeDashoffset="-92" />
-              </svg>
-            </div>
-          </div>
-          <div className="flex-1 space-y-1.5 text-[10px] font-medium text-gray-600 mt-6">
-            <div className="flex justify-between items-center"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Groceries</span> <span className="font-bold">42%</span> <span>₹53,890</span></div>
-            <div className="flex justify-between items-center"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Beverages</span> <span className="font-bold">21%</span> <span>₹26,880</span></div>
-            <div className="flex justify-between items-center"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Snacks</span> <span className="font-bold">17%</span> <span>₹21,760</span></div>
-            <div className="flex justify-between items-center"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500"></span> Personal Care</span> <span className="font-bold">12%</span> <span>₹15,320</span></div>
-            <div className="flex justify-between items-center"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500"></span> Others</span> <span className="font-bold">8%</span> <span>₹10,600</span></div>
-          </div>
+        <Card className="p-5">
+          <h3 className="font-bold text-gray-800 text-[15px] mb-4">Category Sales</h3>
+          <p className="text-sm text-gray-500">Category sales will be shown when invoice-category reporting is available.</p>
         </Card>
 
         {/* Payment Modes */}
-        <Card className="p-5 flex items-center gap-6">
-          <div className="flex-1">
-            <h3 className="font-bold text-gray-800 text-[15px] mb-4">Payment Modes</h3>
-            <div className="w-32 h-32 mx-auto">
-              <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#E5E7EB" strokeWidth="4" />
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#3B82F6" strokeWidth="6" strokeDasharray="48 100" />
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#F59E0B" strokeWidth="6" strokeDasharray="32 100" strokeDashoffset="-48" />
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#10B981" strokeWidth="6" strokeDasharray="12 100" strokeDashoffset="-80" />
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#F43F5E" strokeWidth="6" strokeDasharray="8 100" strokeDashoffset="-92" />
-              </svg>
-            </div>
-          </div>
-          <div className="flex-1 space-y-2 text-[11px] font-medium text-gray-600 mt-6">
-            <div className="flex justify-between items-center"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> UPI</span> <span className="font-bold text-gray-800">48%</span></div>
-            <div className="flex justify-between items-center"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Cash</span> <span className="font-bold text-gray-800">32%</span></div>
-            <div className="flex justify-between items-center"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Card</span> <span className="font-bold text-gray-800">12%</span></div>
-            <div className="flex justify-between items-center"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500"></span> Other</span> <span className="font-bold text-gray-800">8%</span></div>
+        <Card className="p-5">
+          <h3 className="font-bold text-gray-800 text-[15px] mb-4">Payment Modes</h3>
+          <div className="space-y-2 text-sm text-gray-600">
+            {(summary?.paymentModes ?? []).map((payment) => <div key={payment.mode} className="flex justify-between"><span>{payment.mode}</span><span className="font-semibold text-gray-800">₹{payment.amount.toLocaleString('en-IN')}</span></div>)}
+            {summary && summary.paymentModes.length === 0 && <p>No completed payments yet.</p>}
+            {!summary && <p>Payment data is unavailable.</p>}
           </div>
         </Card>
 
         {/* Udhar Overview */}
         <Card className="p-5 flex flex-col justify-between">
           <h3 className="font-bold text-gray-800 text-[15px]">Udhar Overview</h3>
-          <div className="flex items-center gap-4 mt-2">
-            <div className="w-24 h-24 relative">
-              <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#10B981" strokeWidth="6" />
-                <circle cx="18" cy="18" r="16" fill="transparent" stroke="#EF4444" strokeWidth="6" strokeDasharray="65 100" />
-              </svg>
-            </div>
-            <div className="flex-1 space-y-2 text-[11px] font-medium">
-              <div className="flex justify-between items-center"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-400"></span> Total Udhar</span> <span className="font-bold text-gray-800">₹54,320</span></div>
-              <div className="flex justify-between items-center"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Paid (This Month)</span> <span className="font-bold text-green-600">₹18,760</span></div>
-              <div className="flex justify-between items-center"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Overdue</span> <span className="font-bold text-red-500">₹35,560</span></div>
-            </div>
+          <div className="mt-4 space-y-2 text-sm font-medium">
+            <div className="flex justify-between"><span className="text-gray-600">Total Udhar</span><span className="font-bold text-gray-800">₹{customers.reduce((total, customer) => total + Number(customer.udharAmount || 0), 0).toLocaleString('en-IN')}</span></div>
+            <p className="text-xs font-normal text-gray-500">Paid and overdue breakdowns are not available from the current ledger API.</p>
           </div>
-          <button className="w-full text-center mt-4 pt-3 border-t border-gray-100 text-[#8B5CF6] text-[11px] font-bold flex items-center justify-center gap-1">
+          <button onClick={() => router.push('/customers')} className="w-full text-center mt-4 pt-3 border-t border-gray-100 text-[#8B5CF6] text-[11px] font-bold flex items-center justify-center gap-1">
             View Full Report &rarr;
           </button>
         </Card>
 
       </div>
-
-      <Modal isOpen={isAddProductModalOpen} onClose={() => setIsAddProductModalOpen(false)} title="Add New Product" size="lg">
-        <form onSubmit={(e) => { e.preventDefault(); toast('Product added successfully', 'success'); setIsAddProductModalOpen(false); }} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-sm font-medium">Name *</label><input required className="w-full mt-1 border rounded-lg p-2" /></div>
-            <div><label className="text-sm font-medium">SKU (Auto-gen)</label><input defaultValue="PRD008" readOnly className="w-full mt-1 border rounded-lg p-2 bg-gray-50" /></div>
-            <div><label className="text-sm font-medium">Category</label><input className="w-full mt-1 border rounded-lg p-2" /></div>
-            <div><label className="text-sm font-medium">GST Rate</label><select className="w-full mt-1 border rounded-lg p-2"><option>0%</option><option>5%</option><option>12%</option><option>18%</option><option>28%</option></select></div>
-            <div><label className="text-sm font-medium">Cost Price (₹)</label><input type="number" required className="w-full mt-1 border rounded-lg p-2" /></div>
-            <div><label className="text-sm font-medium">Selling Price (₹)</label><input type="number" required className="w-full mt-1 border rounded-lg p-2" /></div>
-            <div><label className="text-sm font-medium">MRP (₹)</label><input type="number" className="w-full mt-1 border rounded-lg p-2" /></div>
-            <div><label className="text-sm font-medium">Opening Stock</label><input type="number" defaultValue="0" className="w-full mt-1 border rounded-lg p-2" /></div>
-          </div>
-          <div className="flex justify-end gap-2 pt-4 border-t">
-            <button type="button" onClick={() => setIsAddProductModalOpen(false)} className="px-4 py-2 border rounded-lg">Cancel</button>
-            <button type="submit" className="px-4 py-2 bg-[#8B5CF6] text-white rounded-lg">Save Product</button>
-          </div>
-        </form>
-      </Modal>
 
       <Modal isOpen={isAddCustomerModalOpen} onClose={() => setIsAddCustomerModalOpen(false)} title="Add New Customer" size="md">
         <form onSubmit={handleAddCustomerSubmit} className="space-y-4">

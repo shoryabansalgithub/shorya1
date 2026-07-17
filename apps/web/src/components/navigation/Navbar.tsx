@@ -5,10 +5,12 @@ import { useTheme } from '@/hooks';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { signOut, useSession } from 'next-auth/react';
 
 export function Navbar() {
   const router = useRouter();
   const { toast } = useToast();
+  const { data: session, status } = useSession();
   
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -175,21 +177,21 @@ export function Navbar() {
         </button>
 
         <div className="relative">
-          <button 
-            onClick={() => router.push('/login')}
-            className="flex items-center gap-3 pl-5 border-l border-gray-100 hover:bg-gray-50 p-2 rounded-xl transition-colors"
-            title="Click to Sign Out"
-          >
-            <div className="text-right hidden sm:block">
-              <p className="text-[13px] font-bold text-gray-800 leading-tight">Admin User</p>
-              <p className="text-[11px] text-red-500 font-bold mt-0.5 hover:underline">Sign Out</p>
-            </div>
-            <img 
-              src="https://api.dicebear.com/7.x/avataaars/svg?seed=Admin" 
-              alt="User" 
-              className="w-9 h-9 rounded-full bg-gray-100 border border-gray-200 object-cover"
-            />
-          </button>
+          {status === 'authenticated' ? (
+            <button
+              onClick={() => signOut({ callbackUrl: '/' })}
+              className="flex items-center gap-3 pl-5 border-l border-gray-100 hover:bg-gray-50 p-2 rounded-xl transition-colors"
+              title="Sign out"
+            >
+              <div className="text-right hidden sm:block">
+                <p className="text-[13px] font-bold text-gray-800 leading-tight">{session.user?.name || session.user?.email}</p>
+                <p className="text-[11px] text-red-500 font-bold mt-0.5 hover:underline">Sign Out</p>
+              </div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-violet-100 text-sm font-bold text-violet-700">{(session.user?.name || session.user?.email || 'U').slice(0, 1).toUpperCase()}</div>
+            </button>
+          ) : (
+            <button onClick={() => router.push('/login')} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-violet-700">Sign in</button>
+          )}
         </div>
       </div>
       

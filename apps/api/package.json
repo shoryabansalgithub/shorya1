@@ -119,10 +119,7 @@
       "json",
       "ts"
     ],
-    "roots": [
-      "<rootDir>/src/",
-      "<rootDir>/test/"
-    ],
+    "roots": ["<rootDir>/src/"],
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
@@ -132,5 +129,6 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+    ,"setupFilesAfterEnv": ["<rootDir>/test/jest-unit.setup.ts"]
   }
 }

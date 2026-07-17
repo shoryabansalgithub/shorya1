@@ -86,16 +86,18 @@ export const authOptions: NextAuthOptions = {
     }),
 
     // ---- Google OAuth ----
-    GoogleProvider({
-      clientId: serverConfig.GOOGLE_CLIENT_ID!,
-      clientSecret: serverConfig.GOOGLE_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          prompt: 'select_account',
-          access_type: 'offline',
-        },
-      },
-    }),
+    ...(serverConfig.GOOGLE_CLIENT_ID && serverConfig.GOOGLE_CLIENT_SECRET
+      ? [GoogleProvider({
+          clientId: serverConfig.GOOGLE_CLIENT_ID,
+          clientSecret: serverConfig.GOOGLE_CLIENT_SECRET,
+          authorization: {
+            params: {
+              prompt: 'select_account',
+              access_type: 'offline',
+            },
+          },
+        })]
+      : []),
   ],
 
   callbacks: {

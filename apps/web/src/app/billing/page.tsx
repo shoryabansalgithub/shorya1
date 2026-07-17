@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/Toast';
 import { motion } from 'framer-motion';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useIdempotencyKey } from '@/hooks/useIdempotencyKey';
-import { clientConfig } from '@/config/env';
+import apiClient from '@/lib/api';
 
 function BillingContent() {
   const { toast } = useToast();
@@ -168,18 +168,10 @@ function BillingContent() {
         }))
       };
 
-      // Simulated or actual POST request
-      const res = await fetch(`${clientConfig.NEXT_PUBLIC_API_URL.replace('/api', '')}/billing/invoice`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Authorization headers should be added here
-        },
-        body: JSON.stringify(payload)
-      });
+      const res = await apiClient.post('/billing/invoice', payload);
 
       // ENG-403: Success cleanup only on 200/201
-      if (res.ok || res.status === 201) {
+      if (res.status === 200 || res.status === 201) {
         clearKey(); // Burn the persistent key
         setIsSuccess(true);
         toast('Bill Generated successfully', 'success');
