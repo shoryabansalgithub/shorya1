@@ -27,7 +27,8 @@ describe('AuthService refresh-token rotation', () => {
     },
   };
   const sockets = { disconnectUser: jest.fn() };
-  const service = new AuthService(usersService as any, jwtService as any, prisma as any, sockets as any);
+  const jwtConfig = { jwtRefreshExpiresIn: '7d' };
+  const service = new AuthService(usersService as any, jwtService as any, prisma as any, sockets as any, jwtConfig as any);
 
   beforeEach(() => jest.clearAllMocks());
 

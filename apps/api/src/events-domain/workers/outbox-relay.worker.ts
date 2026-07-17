@@ -57,15 +57,12 @@ export class OutboxRelayWorker {
             });
             
             // Also dispatch immediate Webhooks for legacy backwards compatibility (Phase 3.2.7)
-            const webhookSuccess = await this.webhookService.dispatch(
+            await this.webhookService.dispatch(
               event.shopId, 
               event.type, 
-              rawPayload
+              rawPayload,
+              event.id,
             );
-
-            if (!webhookSuccess) {
-              throw new Error('Webhook dispatch failed');
-            }
 
             // 3. Mark as DONE
             await tx.$executeRaw`
