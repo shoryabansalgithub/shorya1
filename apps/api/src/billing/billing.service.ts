@@ -371,6 +371,7 @@ export class BillingService {
               data: {
                 invoiceNumber,
                 financialYear,
+                shopId: user.shopId,
                 idempotencyKey: dto.idempotencyKey,
                 customerId: dto.customerId ?? null,
                 cashierId: user.userId,
@@ -403,6 +404,7 @@ export class BillingService {
                 const deduction = stockDeductions.find(d => d.productId === item.productId)!;
                 return {
                   productId: item.productId,
+                  shopId: user.shopId,
                   type: 'SALE',
                   quantityBefore: product.currentStock,
                   quantityChange: -item.quantity,
@@ -423,6 +425,7 @@ export class BillingService {
                   data: {
                     customerId: dto.customerId,
                     invoiceId: invoice.id,
+                    shopId: user.shopId,
                     recordedById: user.userId,
                     type: 'CREDIT',
                     amount: udharAmt,
@@ -484,6 +487,7 @@ export class BillingService {
             // Step K: Audit Log
             await tx.auditLog.create({
               data: {
+                shopId: user.shopId,
                 userId: user.userId,
                 action: 'CREATE',
                 entity: 'Invoice',
@@ -500,6 +504,7 @@ export class BillingService {
             await tx.outboxEvent.create({
               data: {
                 id: eventId,
+                shopId: user.shopId,
                 type: 'INVOICE_CREATED',
                 payload: {
                   eventId,

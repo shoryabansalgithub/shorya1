@@ -1,6 +1,6 @@
 # DukaanAI - AI-Powered Retail Operating System
 
-> **Status**: 🚀 **PHASE 2: UI Implementation Complete**
+> **Status**: Active full-stack application. The web and API applications build successfully; deployment still requires provisioned MySQL, Redis, and Google OAuth credentials.
 
 A world-class, enterprise-grade AI-powered retail operating system designed for small to medium-sized businesses. Built with cutting-edge technologies for scalability, performance, and user experience.
 
@@ -54,7 +54,7 @@ See [TECH_STACK_ARCHITECTURE.md](./TECH_STACK_ARCHITECTURE.md) for detailed arch
 ```
 DukaanAI/
 ├── apps/
-│   └── web/                    # Next.js Frontend (PHASE 2 ✅)
+│   ├── web/                    # Next.js frontend and NextAuth integration
 │       ├── src/
 │       │   ├── app/           # App Router pages
 │       │   ├── components/    # Reusable UI components
@@ -64,6 +64,7 @@ DukaanAI/
 │       │   ├── types/         # TypeScript types
 │       │   └── data/          # Mock data
 │       └── package.json
+│   └── api/                    # NestJS API, Prisma schema, workers, and domain modules
 ├── TECH_STACK_ARCHITECTURE.md
 └── README.md
 ```
@@ -71,23 +72,37 @@ DukaanAI/
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Node.js 20 LTS
-- npm or yarn
+- MySQL 8+
+- Redis 6.2+
+- Google OAuth web-client credentials (only when Google sign-in is enabled)
 
 ### Installation
 
 ```bash
-# Navigate to frontend
-cd apps/web
-
-# Install dependencies
+# Install dependencies from the repository root
 npm install
 
-# Run development server
-npm run dev
+# Create local environment files from the committed templates
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env.local
+
+# Apply database migrations, then start API and web in separate terminals
+cd apps/api && npx prisma migrate deploy && npm run start:dev
+cd apps/web && npm run dev
 ```
 
-Visit `http://localhost:3000` to see the dashboard.
+The API listens on `http://localhost:3001/api`; the web app listens on `http://localhost:3002` when started with its configured port. See [ENVIRONMENT_REQUIREMENTS.md](./ENVIRONMENT_REQUIREMENTS.md) and [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md) before deploying.
+
+### Verification
+
+```bash
+npm run type-check
+npm test --workspace=api -- --runInBand
+npm run build --workspace=api
+npm run build --workspace=dukaanai-web
+```
 
 ## 📋 Development Phases
 
@@ -110,13 +125,13 @@ Visit `http://localhost:3000` to see the dashboard.
 - [x] Responsive design
 - [x] Dark mode ready
 
-### 📋 PHASE 3: Backend & Functionality (Next)
-- [ ] NestJS setup
-- [ ] Database schema with Prisma
-- [ ] Authentication with NextAuth.js
-- [ ] REST API endpoints
-- [ ] Real-time sync with Socket.IO
-- [ ] Business logic implementation
+### ✅ Backend & authentication
+
+- [x] NestJS API and Prisma schema
+- [x] Credentials and Google OAuth authentication
+- [x] Server-side Google ID-token verification and rotating refresh tokens
+- [x] Tenant-scoped REST API endpoints and WebSocket authentication
+- [x] HMAC-signed webhook delivery with audit records
 
 ### 🤖 PHASE 4: AI Features (After Backend)
 - [ ] AI Assistant chat
@@ -210,23 +225,9 @@ Located in: `src/data/mockData.ts`
 - Generous padding/margins
 - Proper visual hierarchy
 
-## 🚀 Next Steps
+## Deployment
 
-1. **Set up Backend** (Phase 3)
-   ```bash
-   mkdir apps/api
-   cd apps/api
-   npm init -y
-   npm install @nestjs/core @nestjs/common @nestjs/cli
-   ```
-
-2. **Connect Mock Data to Real APIs**
-   - Replace mock data with actual API calls
-   - Implement React Query for server state
-
-3. **Implement Authentication**
-   - NextAuth.js setup
-   - Role-based access control
+Use the checklist in [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md). Google OAuth must be configured with the exact callback URL `https://YOUR_WEB_ORIGIN/api/auth/callback/google`; set the matching `GOOGLE_CLIENT_ID` in both applications and enable it in the web environment.
 
 ## 📚 Documentation
 

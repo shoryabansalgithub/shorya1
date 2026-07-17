@@ -6,6 +6,11 @@ import { ForecastService } from './services/forecast.service';
 import { RecommendationEngineService } from './services/recommendation-engine.service';
 import { AnalyticsJobScheduler } from './services/analytics-job.scheduler';
 import { AnalyticsController } from './analytics.controller';
+import { RevenueEngine } from './engines/revenue-engine';
+import { ProfitMarginEngine } from './engines/profit-margin-engine';
+import { TrendEngine } from './engines/trend-engine';
+import { ForecastEngine } from './engines/forecast-engine';
+import { AnalyticsCacheService } from './services/analytics-cache.service';
 
 @Module({
   imports: [PrismaModule],
@@ -14,11 +19,16 @@ import { AnalyticsController } from './analytics.controller';
     ClassificationService,
     ForecastService,
     RecommendationEngineService,
-    AnalyticsJobScheduler
+    AnalyticsJobScheduler,
+    RevenueEngine,
+    ProfitMarginEngine,
+    TrendEngine,
+    ForecastEngine,
+    AnalyticsCacheService,
   ],
   exports: [
     KpiService,
-    RecommendationEngineService
-  ]
+    RecommendationEngineService,
+  ],
 })
 export class AnalyticsModule {}

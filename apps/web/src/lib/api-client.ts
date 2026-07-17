@@ -27,7 +27,6 @@ async function del(url: string): Promise<void> {
 // Field mapping — backend Prisma shapes → frontend types
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProduct(raw: Record<string, unknown>): Product {
   return {
     id: raw.id as string,
@@ -103,16 +102,18 @@ export const customersApi = {
 // ---------------------------------------------------------------------------
 export interface BatchItem {
   id: string;
-  productName: string;
-  batchNumber: string;
+  product: string;
+  sku: string;
+  batchNo: string;
   quantity: number;
-  expiryDate?: string;
-  mfgDate?: string;
-  location?: string;
+  expDate: string | null;
+  mfgDate: string | null;
+  supplierLotNumber: string | null;
+  status: string;
 }
 
 export const inventoryApi = {
-  listBatches: () => get<BatchItem[]>('/batch-domain/batches'),
+  listBatches: () => get<BatchItem[]>('/batches'),
 
   listProducts: () => get<unknown[]>('/inventory/products'),
 };

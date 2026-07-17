@@ -16,25 +16,14 @@ export class ProductsService {
   async create(createProductDto: CreateProductDto) {
     const shopId = this.tenantContext.getShopId();
     
-    // Check for SKU uniqueness within shop
-    const existing = await this.prisma.product.findUnique({
-      where: {
-        shopId_sku_deletedAt: {
-          shopId,
-          sku: createProductDto.sku,
-          deletedAt: null as any // Using Prisma's unique null behavior (actually prisma unique ignores nulls in some DBs, but DukanAI uses a composite key with deletedAt)
-        }
-      }
+    // MySQL allows multiple NULL values in a composite unique key, so a
+    // findUnique lookup with deletedAt: null is invalid and can throw before
+    // creation. Check the active record explicitly instead.
+    const activeExisting = await this.prisma.product.findFirst({
+      where: { shopId, sku: createProductDto.sku, isDeleted: false },
     });
-
-    if (existing && !existing.isDeleted) {
-        // FindFirst is safer for checking active SKUs
-        const activeExisting = await this.prisma.product.findFirst({
-            where: { shopId, sku: createProductDto.sku, isDeleted: false }
-        });
-        if (activeExisting) {
-            throw new BadRequestException(`Product with SKU ${createProductDto.sku} already exists.`);
-        }
+    if (activeExisting) {
+      throw new BadRequestException(`Product with SKU ${createProductDto.sku} already exists.`);
     }
 
     const product = await this.prisma.$transaction(async (tx) => {

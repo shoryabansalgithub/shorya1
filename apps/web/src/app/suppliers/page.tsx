@@ -11,15 +11,6 @@ import { SlidingPanel } from '@/components/ui/SlidingPanel';
 import { useToast } from '@/components/ui/Toast';
 import { AnimatePresence, motion } from 'framer-motion';
 import { suppliersApi } from '@/lib/api-client';
-// Mock Suppliers Data
-const MOCK_SUPPLIERS = [
-  { id: '1', name: 'Delhi Wholesale Mart', contactPerson: 'Rajeev Sharma', phone: '9876543211', pendingPayables: 45000, lastDelivery: '2026-05-18', status: 'Active' },
-  { id: '2', name: 'Balaji Distributors', contactPerson: 'Suresh Yadav', phone: '9123456781', pendingPayables: 12500, lastDelivery: '2026-05-20', status: 'Active' },
-  { id: '3', name: 'HUL Official Supply', contactPerson: 'Amit Kumar', phone: '9988776651', pendingPayables: 0, lastDelivery: '2026-05-15', status: 'Inactive' },
-  { id: '4', name: 'ITC Logistics', contactPerson: 'Neha Singh', phone: '8877665541', pendingPayables: 8900, lastDelivery: '2026-05-19', status: 'Active' },
-  { id: '5', name: 'Local Veg Supply', contactPerson: 'Ramu', phone: '7766554431', pendingPayables: 2400, lastDelivery: '2026-05-21', status: 'Active' },
-];
-
 export default function SuppliersPage() {
   const { toast } = useToast();
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -27,8 +18,8 @@ export default function SuppliersPage() {
 
   useEffect(() => {
     suppliersApi.list()
-      .then(data => { setSuppliers(data.length ? data : MOCK_SUPPLIERS); })
-      .catch(() => { setSuppliers(MOCK_SUPPLIERS); })
+      .then(setSuppliers)
+      .catch(() => { setSuppliers([]); toast('Unable to load suppliers.', 'error'); })
       .finally(() => setLoading(false));
   }, []);
   const [searchTerm, setSearchTerm] = useState('');

@@ -2,6 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 
+/**
+ * Prisma records can contain Decimal and Date instances. Convert them at the
+ * event boundary so JSON columns receive only valid JSON primitives.
+ */
+function toJsonValue(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
 export interface EnterpriseEventPayload {
   eventId: string;
   eventType: string;
@@ -48,7 +56,7 @@ export class ProductEventPublisher {
           shopId: event.shopId,
           tenantId: event.tenantId,
           type: event.eventType,
-          payload: fullEvent as unknown as Prisma.InputJsonValue,
+          payload: toJsonValue(fullEvent),
           correlationId: event.correlationId,
           causationId: event.causationId,
           actorId: event.actorId,
@@ -72,8 +80,8 @@ export class ProductEventPublisher {
           correlationId: event.correlationId,
           causationId: event.causationId,
           actorId: event.actorId,
-          payload: fullEvent.payload as Prisma.InputJsonValue,
-          metadata: fullEvent.metadata as Prisma.InputJsonValue | undefined,
+          payload: toJsonValue(fullEvent.payload),
+          metadata: fullEvent.metadata ? toJsonValue(fullEvent.metadata) : undefined,
         }
       });
 

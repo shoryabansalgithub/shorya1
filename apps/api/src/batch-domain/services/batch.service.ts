@@ -10,6 +10,36 @@ export class BatchService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * Returns only batches that belong to the requesting shop. Batch quantities
+   * are derived from their physical-bin allocations rather than client data.
+   */
+  async listBatches(shopId: string) {
+    const batches = await this.prisma.batch.findMany({
+      where: { shopId },
+      include: {
+        product: { select: { name: true, sku: true } },
+        batchStocks: { select: { quantity: true, reservedQuantity: true } },
+      },
+      orderBy: [{ expiryDate: 'asc' }, { createdAt: 'desc' }],
+    });
+
+    return batches.map((batch) => ({
+      id: batch.id,
+      product: batch.product.name,
+      sku: batch.product.sku,
+      batchNo: batch.batchNumber,
+      mfgDate: batch.mfgDate,
+      expDate: batch.expiryDate,
+      quantity: batch.batchStocks.reduce(
+        (total, stock) => total + Number(stock.quantity) - Number(stock.reservedQuantity),
+        0,
+      ),
+      supplierLotNumber: batch.supplierLotNumber,
+      status: batch.status,
+    }));
+  }
+
+  /**
    * Registers a new Batch (Lot) in the system.
    */
   async createBatch(shopId: string, dto: CreateBatchDto) {

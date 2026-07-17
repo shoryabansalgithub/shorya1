@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
+import { customersApi } from '@/lib/api-client';
 import { 
   ArrowLeft, Phone, MapPin, Calendar as CalendarIcon, MessageCircle, CreditCard, 
   MoreVertical, ShoppingCart, Banknote, History, FileText, ShieldAlert,
@@ -16,6 +17,7 @@ export default function CustomerDetailsPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [customer, setCustomer] = useState<any>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   const handleRecordPayment = (e: React.FormEvent) => {
@@ -25,46 +27,19 @@ export default function CustomerDetailsPage() {
   };
 
   useEffect(() => {
-    if (params.id) {
-      fetch('http://localhost:3002/api/customers')
-        .then(res => {
-          if (!res.ok) throw new Error('API fetch failed');
-          return res.json();
-        })
-        .then(customers => {
-          if (customers) {
-            const found = customers.find((c: any) => c.id.toString() === params.id.toString());
-            if (found) {
-              setCustomer({
-                ...found,
-                udhar: Number(found.outstandingBalance) || 0
-              });
-            } else {
-              const decodedName = decodeURIComponent(params.id as string);
-              setCustomer({
-                id: params.id,
-                name: decodedName.startsWith('CUST-') ? 'Unknown Customer' : decodedName,
-                phone: '+91 98765 43210',
-                udhar: Math.floor(Math.random() * 5000) + 1000,
-                status: 'Pending'
-              });
-            }
-          }
-        })
-        .catch(err => {
-          console.error('Failed to fetch customers:', err);
-          const decodedName = decodeURIComponent(params.id as string);
-          setCustomer({
-            id: params.id,
-            name: decodedName.startsWith('CUST-') ? 'Unknown Customer' : decodedName,
-            phone: '+91 98765 43210',
-            udhar: Math.floor(Math.random() * 5000) + 1000,
-            status: 'Pending'
-          });
+    const id = Array.isArray(params.id) ? params.id[0] : params.id;
+    if (id) {
+      setLoadError(null);
+      customersApi.get(id)
+        .then((record) => setCustomer({ ...record, udhar: Number(record.udharAmount) || 0 }))
+        .catch((error) => {
+          console.error('Failed to fetch customer:', error);
+          setLoadError('This customer could not be loaded. It may have been removed or you may not have access.');
         });
     }
   }, [params.id]);
 
+  if (loadError) return <div className="p-10 text-center text-sm font-medium text-red-600">{loadError}</div>;
   if (!customer) return <div className="p-10 flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#8B5CF6]"></div></div>;
 
   return (

@@ -37,7 +37,7 @@ export class InventoryEventConsumer {
       }
 
       // 3. Dispatch to Webhooks
-      await this.webhooks.dispatch(event.shopId, event.eventType, event.payload);
+      await this.webhooks.dispatch(event.shopId, event.eventType, event.payload, event.eventId);
 
     } catch (error: any) {
       this.logger.error(`Failed to process event ${event.eventId}: ${error.message}`);
