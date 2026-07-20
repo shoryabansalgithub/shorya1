@@ -69,4 +69,7 @@ async function bootstrap() {
   await app.listen(port);
   logger.log(`Application is running on: http://localhost:${port}`);
 }
-bootstrap();
+bootstrap().catch(err => {
+  console.error('FAILED TO START', err);
+  setTimeout(() => process.exit(1), 100);
+});

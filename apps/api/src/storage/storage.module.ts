@@ -6,7 +6,7 @@ import { StoragePathBuilder } from './storage-path.builder';
 import { S3Client } from '@aws-sdk/client-s3';
 import { StorageConfig } from '../config/domains/storage.config';
 
-export const S3_CLIENT = 'S3_CLIENT';
+import { S3_CLIENT } from './storage.constants';
 
 @Module({
   imports: [AuthModule],

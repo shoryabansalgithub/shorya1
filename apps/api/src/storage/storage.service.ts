@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { StorageConfig } from '../config/domains/storage.config';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { S3_CLIENT } from './storage.module';
+import { S3_CLIENT } from './storage.constants';
 import archiver from 'archiver';
 import * as crypto from 'crypto';
 import * as fs from 'fs-extra';
