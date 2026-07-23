@@ -11,6 +11,8 @@ import { AppConfig, Environment } from './config/domains/app.config';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
+    // Reject instead of aborting the process, so the catch below can report why.
+    abortOnError: false,
   });
   
   // 1. Global Logger Binding
@@ -69,7 +71,10 @@ async function bootstrap() {
   await app.listen(port);
   logger.log(`Application is running on: http://localhost:${port}`);
 }
-bootstrap().catch(err => {
-  console.error('FAILED TO START', err);
+bootstrap().catch((error) => {
+  // `bufferLogs: true` discards buffered logs when bootstrap throws before
+  // `app.useLogger()` is reached, which turns any startup crash into a silent
+  // exit(1). Writing straight to stderr guarantees the cause is always visible.
+  console.error('[Bootstrap] Fatal error during application startup:', error);
   setTimeout(() => process.exit(1), 100);
 });

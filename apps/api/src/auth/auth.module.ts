@@ -8,10 +8,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { JwtConfig } from '../config/domains/jwt.config';
 import { AuthController } from './auth.controller';
 import { RolesGuard } from './roles.guard';
+import { AuthBypassModule } from './auth-bypass.module';
 import { GoogleIdentityService } from './google-identity.service';
 
 @Module({
   imports: [
+    AuthBypassModule,
     UsersModule,
     PassportModule,
     JwtModule.registerAsync({
