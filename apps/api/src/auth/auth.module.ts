@@ -9,6 +9,7 @@ import { JwtConfig } from '../config/domains/jwt.config';
 import { AuthController } from './auth.controller';
 import { RolesGuard } from './roles.guard';
 import { AuthBypassModule } from './auth-bypass.module';
+import { GoogleIdentityService } from './google-identity.service';
 
 @Module({
   imports: [
@@ -24,7 +25,7 @@ import { AuthBypassModule } from './auth-bypass.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, LocalStrategy, JwtStrategy, RolesGuard],
+  providers: [AuthService, LocalStrategy, JwtStrategy, RolesGuard, GoogleIdentityService],
   exports: [AuthService, RolesGuard],
 })
 export class AuthModule {}

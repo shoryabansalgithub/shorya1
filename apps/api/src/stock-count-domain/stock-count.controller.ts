@@ -6,7 +6,8 @@ import { CreateStockCountSessionDto, SubmitCountItemDto, CreateAdjustmentRequest
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../iam/guards/tenant.guard';
 import { TenantContextService } from '../iam/tenant-context/tenant-context.service';
-// Assuming a CurrentUser decorator exists, using dummy string for now.
+import { CurrentUser } from '../iam/decorators/current-user.decorator';
+import { SafeUserDto } from '../users/dto/safe-user.dto';
 
 @UseGuards(JwtAuthGuard, TenantGuard)
 @Controller('stock-counts')
@@ -42,13 +43,12 @@ export class StockCountController {
   }
 
   @Post('adjustments')
-  async requestAdjustment(@Body() dto: CreateAdjustmentRequestDto) {
-    // Dummy 'API_USER' since auth isn't in this snippet
-    return this.approvalService.requestAdjustment(this.tenantContext.getShopId(), 'API_USER', dto);
+  async requestAdjustment(@Body() dto: CreateAdjustmentRequestDto, @CurrentUser() user: SafeUserDto) {
+    return this.approvalService.requestAdjustment(this.tenantContext.getShopId(), user.id, dto);
   }
 
   @Post('adjustments/:id/approve')
-  async approveAdjustment(@Param('id') id: string) {
-    return this.approvalService.approveAdjustment(this.tenantContext.getShopId(), id, 'MANAGER_USER');
+  async approveAdjustment(@Param('id') id: string, @CurrentUser() user: SafeUserDto) {
+    return this.approvalService.approveAdjustment(this.tenantContext.getShopId(), id, user.id);
   }
 }

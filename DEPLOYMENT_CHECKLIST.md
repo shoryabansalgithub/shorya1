@@ -7,6 +7,8 @@ This checklist enforces the exact execution order required to deploy Epic 1 safe
 - [ ] Verify `REDIS_URL` points to a Redis 6.2+ instance.
 - [ ] Verify `FRONTEND_URL` exactly matches production CORS origin(s), comma-separated.
 - [ ] Verify all `JWT_SECRET`, `JWT_EXPIRES_IN`, `JWT_REFRESH_SECRET`, `JWT_REFRESH_EXPIRES_IN` are securely set.
+- [ ] Configure `NEXTAUTH_SECRET` and `NEXTAUTH_URL` in the web application.
+- [ ] If Google OAuth is enabled, set `GOOGLE_CLIENT_ID` in both applications, `GOOGLE_CLIENT_SECRET` in the web application, and add `https://YOUR_WEB_ORIGIN/api/auth/callback/google` to Google Cloud's authorized redirect URIs.
 - [ ] Verify `NODE_ENV=production` to disable Swagger and SQL query logging.
 
 ## Phase 2: Database Orchestration
@@ -20,6 +22,7 @@ This checklist enforces the exact execution order required to deploy Epic 1 safe
 
 ## Phase 3: Cluster Boot Sequence
 - [ ] Execute `npm run build` — must complete with 0 errors.
+- [ ] Execute `npm test --workspace=api -- --runInBand` — unit tests must pass.
 - [ ] Boot the primary API HTTP nodes.
 - [ ] Verify `/api/health` or a GET request succeeds.
   - Verify `correlationId` appears in stdout logs.

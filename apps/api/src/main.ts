@@ -76,5 +76,5 @@ bootstrap().catch((error) => {
   // `app.useLogger()` is reached, which turns any startup crash into a silent
   // exit(1). Writing straight to stderr guarantees the cause is always visible.
   console.error('[Bootstrap] Fatal error during application startup:', error);
-  process.exit(1);
+  setTimeout(() => process.exit(1), 100);
 });

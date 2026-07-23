@@ -13,6 +13,7 @@ import { clientConfig } from '@/config/env';
 const API_URL = clientConfig.NEXT_PUBLIC_API_URL;
 
 export const dynamic = 'force-dynamic';
+const googleOAuthEnabled = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED === 'true';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -78,6 +79,10 @@ export default function RegisterPage() {
   };
 
   const handleGoogleSignup = async () => {
+    if (!googleOAuthEnabled) {
+      setError('Google sign-in is not configured for this deployment.');
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
@@ -127,7 +132,7 @@ export default function RegisterPage() {
         )}
 
         {/* --- Google sign-up --- */}
-        <button
+        {googleOAuthEnabled && <button
           type="button"
           onClick={handleGoogleSignup}
           disabled={loading}
@@ -140,16 +145,16 @@ export default function RegisterPage() {
             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
           </svg>
           Continue with Google
-        </button>
+        </button>}
 
         {/* --- Divider --- */}
-        <div className="flex items-center gap-3 my-6">
+        {googleOAuthEnabled && <div className="flex items-center gap-3 my-6">
           <div className="flex-1 h-px bg-gray-200" />
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
             or
           </span>
           <div className="flex-1 h-px bg-gray-200" />
-        </div>
+        </div>}
 
         {/* --- Registration form --- */}
         <form onSubmit={handleRegister} className="space-y-4">

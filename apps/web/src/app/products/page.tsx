@@ -23,6 +23,7 @@ export default function ProductsPage() {
   
   // Modals & Panels
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isStockAdjustModalOpen, setIsStockAdjustModalOpen] = useState(false);
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState('Details');
@@ -44,6 +45,10 @@ export default function ProductsPage() {
   const [newPrice, setNewPrice] = useState('');
   const [newCost, setNewCost] = useState('');
   const [newQty, setNewQty] = useState('');
+  const [adjustmentQuantity, setAdjustmentQuantity] = useState('');
+  const [adjustmentReason, setAdjustmentReason] = useState('CORRECTION');
+  const [adjustmentNotes, setAdjustmentNotes] = useState('');
+  const [isAdjustingStock, setIsAdjustingStock] = useState(false);
   
   const categories = ['All', ...Array.from(new Set(products.map(p => p.category)))];
 
@@ -206,7 +211,10 @@ export default function ProductsPage() {
         setIsSidePanelOpen(true);
         break;
       case 'Update Stock':
-        toast(`Update stock modal for ${product.name} coming soon`, 'info');
+        setAdjustmentQuantity('');
+        setAdjustmentReason('CORRECTION');
+        setAdjustmentNotes('');
+        setIsStockAdjustModalOpen(true);
         break;
       case 'Edit Product':
         toast(`Edit modal for ${product.name} coming soon`, 'info');
@@ -220,6 +228,39 @@ export default function ProductsPage() {
           toast(`Failed to delete ${product.name}`, 'error');
         }
         break;
+    }
+  };
+
+  const handleStockAdjustment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProduct) return;
+
+    const quantityChange = Number(adjustmentQuantity);
+    if (!Number.isFinite(quantityChange) || quantityChange === 0) {
+      toast('Enter a non-zero stock adjustment.', 'error');
+      return;
+    }
+
+    try {
+      setIsAdjustingStock(true);
+      const { data: inventoryItem } = await apiClient.post<{ id: string }>('/inventory-domain', {
+        productId: selectedProduct.id,
+      });
+      await apiClient.post(`/inventory-domain/${inventoryItem.id}/adjust`, {
+        reason: adjustmentReason,
+        quantityChange,
+        notes: adjustmentNotes || undefined,
+      });
+
+      const refreshedProduct = await productsApi.get(selectedProduct.id);
+      setProducts((current) => current.map((product) => product.id === refreshedProduct.id ? refreshedProduct : product));
+      setSelectedProduct(refreshedProduct);
+      setIsStockAdjustModalOpen(false);
+      toast('Stock updated successfully.', 'success');
+    } catch (error: any) {
+      toast(error?.response?.data?.message ?? 'Failed to update stock.', 'error');
+    } finally {
+      setIsAdjustingStock(false);
     }
   };
 
@@ -497,6 +538,40 @@ export default function ProductsPage() {
         </form>
       </Modal>
 
+      <Modal
+        isOpen={isStockAdjustModalOpen}
+        onClose={() => !isAdjustingStock && setIsStockAdjustModalOpen(false)}
+        title={selectedProduct ? `Adjust Stock: ${selectedProduct.name}` : 'Adjust Stock'}
+        size="md"
+      >
+        <form onSubmit={handleStockAdjustment} className="space-y-4">
+          <p className="text-sm text-gray-500">Use a positive quantity to add stock or a negative quantity to reduce it.</p>
+          <div>
+            <label className="text-sm font-medium">Quantity change *</label>
+            <input value={adjustmentQuantity} onChange={(e) => setAdjustmentQuantity(e.target.value)} type="number" step="0.001" required className="w-full mt-1 border rounded-lg p-2" placeholder="e.g. 10 or -2" />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Reason *</label>
+            <select value={adjustmentReason} onChange={(e) => setAdjustmentReason(e.target.value)} className="w-full mt-1 border rounded-lg p-2">
+              <option value="CORRECTION">Correction</option>
+              <option value="MANUAL_COUNT">Manual count</option>
+              <option value="DAMAGE">Damage</option>
+              <option value="LOSS">Loss</option>
+              <option value="RETURN">Return</option>
+              <option value="EXPIRY">Expiry</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Notes</label>
+            <textarea value={adjustmentNotes} onChange={(e) => setAdjustmentNotes(e.target.value)} className="w-full mt-1 border rounded-lg p-2" rows={3} />
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <button type="button" disabled={isAdjustingStock} onClick={() => setIsStockAdjustModalOpen(false)} className="px-4 py-2 border rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+            <button type="submit" disabled={isAdjustingStock} className="px-4 py-2 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white rounded-lg text-sm font-bold disabled:opacity-50">{isAdjustingStock ? 'Saving…' : 'Save adjustment'}</button>
+          </div>
+        </form>
+      </Modal>
+
       {/* Side Panel for Details */}
       <SlidingPanel isOpen={isSidePanelOpen} onClose={() => setIsSidePanelOpen(false)} title="Product Details">
         {selectedProduct && (
@@ -555,7 +630,7 @@ export default function ProductsPage() {
                 </div>
                 
                 <button 
-                  onClick={() => { setIsSidePanelOpen(false); toast('Stock update modal coming soon', 'info'); }}
+                  onClick={() => { setIsSidePanelOpen(false); setIsStockAdjustModalOpen(true); }}
                   className="w-full mt-4 bg-purple-50 text-[#8B5CF6] hover:bg-purple-100 py-3 rounded-xl text-sm font-bold transition-colors border border-purple-200 flex items-center justify-center gap-2"
                 >
                   <TrendingUp size={16} /> Update Stock Level

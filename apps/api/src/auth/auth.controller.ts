@@ -14,6 +14,7 @@ import { CreateUserDto } from '../users/dto/create-user.dto';
 import { SafeUserDto } from '../users/dto/safe-user.dto';
 import type { Request as ExpressRequest } from 'express';
 import { GoogleAuthDto } from './dto/google-auth.dto';
+import { GoogleIdentityService } from './google-identity.service';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: SafeUserDto;
@@ -25,6 +26,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly usersService: UsersService,
+    private readonly googleIdentityService: GoogleIdentityService,
   ) {}
 
   @Public()
@@ -63,11 +65,8 @@ export class AuthController {
     @Ip() ip: string,
     @Headers('user-agent') userAgent: string,
   ): Promise<LoginResponseDto> {
-    const user = await this.usersService.findOrCreateGoogleUser(
-      body.googleId,
-      body.email,
-      body.name,
-    );
+    const identity = await this.googleIdentityService.verifyIdToken(body.idToken);
+    const user = await this.usersService.findOrCreateGoogleUser(identity.googleId, identity.email, identity.name);
     return this.authService.login(user, ip, userAgent);
   }
 

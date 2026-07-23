@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { signIn, useSession } from 'next-auth/react';
@@ -11,8 +11,9 @@ import { AUTH_DISABLED } from '@/lib/auth-bypass';
 
 // Never statically generated — searchParams driven error display and real-time auth state.
 export const dynamic = 'force-dynamic';
+const googleOAuthEnabled = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED === 'true';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -73,6 +74,10 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    if (!googleOAuthEnabled) {
+      setError('Google sign-in is not configured for this deployment.');
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
@@ -122,7 +127,7 @@ export default function LoginPage() {
           )}
 
           {/* --- Google sign-in --- */}
-          <button
+          {googleOAuthEnabled && <button
             type="button"
             onClick={handleGoogleLogin}
             disabled={loading}
@@ -147,16 +152,16 @@ export default function LoginPage() {
               />
             </svg>
             Continue with Google
-          </button>
+          </button>}
 
           {/* --- Divider --- */}
-          <div className="flex items-center gap-3 my-6">
+          {googleOAuthEnabled && <div className="flex items-center gap-3 my-6">
             <div className="flex-1 h-px bg-gray-200" />
             <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
               or
             </span>
             <div className="flex-1 h-px bg-gray-200" />
-          </div>
+          </div>}
 
           {/* --- Email / password form --- */}
           <form onSubmit={handleCredentialsLogin} className="space-y-5">
@@ -235,5 +240,13 @@ export default function LoginPage() {
           </div>
         </div>
       </motion.div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

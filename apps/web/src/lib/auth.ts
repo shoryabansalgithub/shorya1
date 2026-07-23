@@ -12,10 +12,11 @@ interface DukaanUser extends User {
   role: string;
   shopId: string;
   accessToken: string;
+  refreshToken: string;
 }
 
 function isDukaanUser(u: User): u is DukaanUser {
-  return 'accessToken' in u && 'role' in u && 'shopId' in u;
+  return 'accessToken' in u && 'refreshToken' in u && 'role' in u && 'shopId' in u;
 }
 
 // ---------------------------------------------------------------------------
@@ -44,6 +45,7 @@ async function provisionUserFromBackend(
         role: data.user.role,
         shopId: data.user.shopId,
         accessToken: data.access_token,
+        refreshToken: data.refresh_token,
       };
     }
     return null;
@@ -86,16 +88,18 @@ export const authOptions: NextAuthOptions = {
     }),
 
     // ---- Google OAuth ----
-    GoogleProvider({
-      clientId: serverConfig.GOOGLE_CLIENT_ID!,
-      clientSecret: serverConfig.GOOGLE_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          prompt: 'select_account',
-          access_type: 'offline',
-        },
-      },
-    }),
+    ...(serverConfig.GOOGLE_CLIENT_ID && serverConfig.GOOGLE_CLIENT_SECRET
+      ? [GoogleProvider({
+          clientId: serverConfig.GOOGLE_CLIENT_ID,
+          clientSecret: serverConfig.GOOGLE_CLIENT_SECRET,
+          authorization: {
+            params: {
+              prompt: 'select_account',
+              access_type: 'offline',
+            },
+          },
+        })]
+      : []),
   ],
 
   callbacks: {

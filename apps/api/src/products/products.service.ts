@@ -15,11 +15,10 @@ export class ProductsService {
 
   async create(createProductDto: CreateProductDto) {
     const shopId = this.tenantContext.getShopId();
-
-    // Check for active SKU uniqueness within shop. findFirst (not findUnique on
-    // the shopId_sku_deletedAt composite key) — that compound-unique WHERE input
-    // rejects a null deletedAt, which is exactly the "active" (non-soft-deleted)
-    // row we need to match.
+    
+    // MySQL allows multiple NULL values in a composite unique key, so a
+    // findUnique lookup with deletedAt: null is invalid and can throw before
+    // creation. Check the active record explicitly instead.
     const activeExisting = await this.prisma.product.findFirst({
       where: { shopId, sku: createProductDto.sku, isDeleted: false },
     });

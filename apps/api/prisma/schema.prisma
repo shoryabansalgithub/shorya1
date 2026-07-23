@@ -462,13 +462,16 @@ model Shop {
   email     String?
   logoUrl   String?
   status    ShopStatus @default(ACTIVE)
-  ownerId   String     @unique
+  // Nullable at the database level so a shop and its first owner can be
+  // created atomically without an impossible circular foreign-key insert.
+  // UsersService assigns this before the transaction commits.
+  ownerId   String?    @unique
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   isDeleted Boolean    @default(false)
   deletedAt DateTime?
 
-  owner    User          @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  owner    User?         @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   settings ShopSettings?
 
   users                User[]
@@ -5346,4 +5349,3 @@ model PurchaseEventStatistics {
 
   @@unique([shopId, date])
 }
-

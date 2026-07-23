@@ -61,7 +61,7 @@ export class ConfigurationRegistryService implements OnModuleInit {
               this.logger.error(`Already owned by: ${existingOwner}`);
               this.logger.error(`================================================================================`);
               this.logger.error(`Application cannot safely start. Halting process.`);
-              process.exit(1);
+              setTimeout(() => process.exit(1), 100);
             }
           }
           this.data.variableOwnership.set(v, domainName);
@@ -98,7 +98,7 @@ export class ConfigurationRegistryService implements OnModuleInit {
             domain.validatedBy.push(ruleName);
           } else {
             this.logger.error(`Validation Rule ${ruleName} depends on unknown domain ${depName}.`);
-            process.exit(1);
+            setTimeout(() => process.exit(1), 100);
           }
         }
       }

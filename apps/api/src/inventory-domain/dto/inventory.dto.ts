@@ -1,11 +1,11 @@
-import { IsDecimal, IsEnum, IsOptional, IsString, Min } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
 import { AdjustmentReason } from '@prisma/client';
 
 export class AdjustStockDto {
   @IsEnum(AdjustmentReason)
   reason: AdjustmentReason;
 
-  @IsDecimal()
+  @IsNumber()
   quantityChange: number;
 
   @IsOptional()
@@ -30,26 +30,26 @@ export class CreateInventoryItemDto {
   locationId?: string;
 
   @IsOptional()
-  @IsDecimal()
+  @IsNumber()
   onHand?: number;
 
   @IsOptional()
-  @IsDecimal()
+  @IsNumber()
   reorderPoint?: number;
 
   @IsOptional()
-  @IsDecimal()
+  @IsNumber()
   reorderQty?: number;
 
   @IsOptional()
-  @IsDecimal()
+  @IsNumber()
   safetyStock?: number;
 
   @IsOptional()
-  @IsDecimal()
+  @IsNumber()
   maxStock?: number;
 
   @IsOptional()
-  @IsDecimal()
+  @IsNumber()
   minStock?: number;
 }
