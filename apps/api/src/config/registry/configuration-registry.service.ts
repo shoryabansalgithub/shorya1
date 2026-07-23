@@ -26,14 +26,27 @@ export class ConfigurationRegistryService implements OnModuleInit {
 
     // 1. Discover Config Domains and their Variables
     for (const wrapper of providers) {
-      if (!wrapper.metatype || !wrapper.instance) continue;
+      if (!wrapper.instance) continue;
 
-      const domainMetadata: ConfigDomainMetadata = Reflect.getMetadata(CONFIG_DOMAIN_KEY, wrapper.metatype);
+      // Config domains are registered with `useFactory` (see EnterpriseConfigModule),
+      // so the @ConfigDomain metadata lives on the injection token (the config
+      // class), not on wrapper.metatype (which is the factory / null). Resolve
+      // the domain class from whichever carries the metadata; without this the
+      // registry discovers zero domains and every rule dependency looks unknown.
+      const domainType: Function | undefined =
+        wrapper.metatype && Reflect.getMetadata(CONFIG_DOMAIN_KEY, wrapper.metatype)
+          ? wrapper.metatype
+          : typeof wrapper.token === 'function' && Reflect.getMetadata(CONFIG_DOMAIN_KEY, wrapper.token)
+            ? (wrapper.token as Function)
+            : undefined;
+      if (!domainType) continue;
+
+      const domainMetadata: ConfigDomainMetadata = Reflect.getMetadata(CONFIG_DOMAIN_KEY, domainType);
       if (domainMetadata) {
-        const domainName = wrapper.metatype.name;
-        
+        const domainName = domainType.name;
+
         // Extract variables
-        const variables: string[] = Reflect.getMetadata(ENV_VARIABLE_KEY, wrapper.metatype) || [];
+        const variables: string[] = Reflect.getMetadata(ENV_VARIABLE_KEY, domainType) || [];
 
         // Check for duplicate ownership
         for (const v of variables) {

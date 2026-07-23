@@ -3,6 +3,7 @@ import type { Session } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
 
 import { clientConfig, serverConfig } from '../config/env';
+import { AUTH_DISABLED } from './auth-bypass';
 
 const API_URL = clientConfig.NEXT_PUBLIC_API_URL;
 
@@ -63,10 +64,12 @@ apiClient.interceptors.request.use(
 );
 
 // ---- Response interceptor — auto-signout on 401 ----
+// Skipped when auth is bypassed: there is no session to sign out of, and
+// bouncing to /login would trap the user behind a gate that is disabled.
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401 && typeof window !== 'undefined') {
+    if (error.response?.status === 401 && typeof window !== 'undefined' && !AUTH_DISABLED) {
       const { signOut } = await import('next-auth/react');
       await signOut({ callbackUrl: '/login' });
     }
