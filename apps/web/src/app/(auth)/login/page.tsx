@@ -7,6 +7,7 @@ import { signIn, useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import { ShoppingBag, Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { AUTH_DISABLED } from '@/lib/auth-bypass';
 
 // Never statically generated — searchParams driven error display and real-time auth state.
 export const dynamic = 'force-dynamic';
@@ -21,9 +22,9 @@ export default function LoginPage() {
   const { status } = useSession();
   const { toast } = useToast();
 
-  // If already authenticated, redirect away from login
+  // If already authenticated (or auth is bypassed), redirect away from login
   useEffect(() => {
-    if (status === 'authenticated') {
+    if (AUTH_DISABLED || status === 'authenticated') {
       router.replace('/dashboard');
     }
   }, [status, router]);

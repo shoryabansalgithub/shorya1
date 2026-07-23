@@ -29,7 +29,10 @@ export class CustomersService {
       const newCustomer = await this.customerRepository.create({
         name: data.name,
         phone: data.phone,
-        shop: { connect: { id: shopId } },
+        // Scalar shopId (not shop.connect): the tenant Prisma extension injects
+        // shopId for tenant-owned models, and Prisma rejects both a relation
+        // connect and the scalar FK in the same create.
+        shopId,
         email: data.email || null,
         address: data.address || null,
         creditLimit: this.salesFeatureConfig.defaultCreditLimit,

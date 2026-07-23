@@ -89,6 +89,24 @@ npm run dev
 
 Visit `http://localhost:3000` to see the dashboard.
 
+### Disabling authentication (development / demo only)
+
+Authentication can be switched off behind an explicit, reversible flag. It is
+OFF by default: when the variables are unset, empty, or anything other than an
+explicit truthy value (`true`, `1`, `yes`, `on`), normal login is required. An
+unrecognized value makes the API refuse to boot rather than guess.
+
+- API: set `AUTH_DISABLED=true` in the API environment. Every request then runs
+  as a provisioned system user (`system@dukaanai.local`, role OWNER, own shop),
+  and the API logs a loud `AUTH DISABLED` warning at startup. The real auth code
+  paths (including Google account provisioning and token verification) remain
+  intact - the flag only gates access, it never accepts unverified identity.
+- Web: set `NEXT_PUBLIC_AUTH_DISABLED=true` in the web environment. The login
+  gate is skipped and the app loads directly. The value is inlined at build
+  time, so for production builds it must be set before `next build`.
+
+Set both flags together, and never enable them for a production deployment.
+
 ## 📋 Development Phases
 
 ### ✅ PHASE 1: Tech Stack Architecture

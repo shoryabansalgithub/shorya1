@@ -6,6 +6,7 @@ import { plainToInstance } from 'class-transformer';
 import { AppConfig, Environment } from './domains/app.config';
 import { DatabaseConfig } from './domains/database.config';
 import { JwtConfig } from './domains/jwt.config';
+import { AuthConfig, parseAuthDisabled } from './domains/auth.config';
 import { RedisConfig } from './domains/redis.config';
 import { StorageConfig } from './domains/storage.config';
 import { AiConfig } from './domains/ai.config';
@@ -95,6 +96,18 @@ function validateConfig<T extends object>(configClass: T): T {
           jwtExpiresIn: process.env.JWT_EXPIRES_IN,
           jwtRefreshSecret: process.env.JWT_REFRESH_SECRET,
           jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
+        });
+        return validateConfig(config);
+      },
+    },
+    {
+      provide: AuthConfig,
+      useFactory: () => {
+        const config = new AuthConfig();
+        // parseAuthDisabled returns undefined for unrecognized values, which
+        // fails the @IsBoolean validation below and refuses to boot.
+        Object.assign(config, {
+          authDisabled: parseAuthDisabled(process.env.AUTH_DISABLED),
         });
         return validateConfig(config);
       },
@@ -324,6 +337,7 @@ function validateConfig<T extends object>(configClass: T): T {
     AppConfig,
     DatabaseConfig,
     JwtConfig,
+    AuthConfig,
     RedisConfig,
     StorageConfig,
     AiConfig,
