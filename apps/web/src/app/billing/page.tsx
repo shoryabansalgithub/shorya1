@@ -168,8 +168,9 @@ function BillingContent() {
         }))
       };
 
-      // Simulated or actual POST request
-      const res = await fetch(`${clientConfig.NEXT_PUBLIC_API_URL.replace('/api', '')}/billing/invoice`, {
+      // Simulated or actual POST request. NEXT_PUBLIC_API_URL already includes
+      // the API's global /api prefix; stripping it here 404'd the request.
+      const res = await fetch(`${clientConfig.NEXT_PUBLIC_API_URL}/billing/invoice`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

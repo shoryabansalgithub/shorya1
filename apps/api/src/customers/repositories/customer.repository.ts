@@ -6,7 +6,9 @@ import { Prisma } from '@prisma/client';
 export class CustomerRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(data: Prisma.CustomerCreateInput) {
+  async create(
+    data: Prisma.CustomerCreateInput | Prisma.CustomerUncheckedCreateInput,
+  ) {
     return this.prisma.customer.create({ data });
   }
 
