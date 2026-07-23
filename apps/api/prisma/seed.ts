@@ -291,11 +291,9 @@ async function main() {
   // -- Suppliers -------------------------------------------------------------
   const existingSuppliers = await apiOk<Array<{ id: string; phone: string }>>('GET', '/suppliers');
   const supplierPhones = new Set(existingSuppliers.map((s) => s.phone));
-  const supplierIds: string[] = existingSuppliers.map((s) => s.id);
   for (const supplier of SUPPLIERS) {
     if (!supplierPhones.has(supplier.phone)) {
-      const created = await apiOk<{ id: string }>('POST', '/suppliers', supplier);
-      supplierIds.push(created.id);
+      await apiOk<{ id: string }>('POST', '/suppliers', supplier);
       console.log(`  + supplier ${supplier.name}`);
     }
   }
@@ -402,38 +400,9 @@ async function main() {
     }
   }
 
-  // -- Purchase orders (best-effort, complex domain) -------------------------
-  const poCount = await prisma.purchaseOrder.count({ where: { shopId } });
-  if (poCount === 0 && supplierIds.length >= 2) {
-    const poPlans = [
-      { supplierId: supplierIds[0], sku: 'GRO-ATTA-5KG', qty: 20, unitCost: 215 },
-      { supplierId: supplierIds[1], sku: 'SNK-MAGGI-12', qty: 30, unitCost: 120 },
-    ];
-    for (const po of poPlans) {
-      const productId = productIdBySku.get(po.sku)!;
-      const { status, data } = await api('POST', '/purchases', {
-        supplierId: po.supplierId,
-        currency: 'INR',
-        totalAmount: po.qty * po.unitCost,
-        notes: 'Restock order (seed)',
-        items: [
-          {
-            productId,
-            quantity: po.qty,
-            unit: 'PACK',
-            unitCost: po.unitCost,
-            totalCost: po.qty * po.unitCost,
-            price: po.unitCost,
-          },
-        ],
-      });
-      if (status >= 300) {
-        console.warn(`  ! purchase order for ${po.sku} failed: HTTP ${status} ${JSON.stringify(data)?.slice(0, 200)}`);
-      } else {
-        console.log(`  + purchase order for ${po.sku}`);
-      }
-    }
-  }
+  // Supplier payables for the demo come from each supplier's opening balance
+  // (seeded above); purchase-order documents are intentionally not seeded - no
+  // page surfaces them and the procurement lifecycle is out of demo scope.
 
   // -- Summary ---------------------------------------------------------------
   const [products, customers, suppliers, invoices, expenses, notifications] = await Promise.all([
